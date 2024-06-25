@@ -26,6 +26,8 @@ defmodule StatsigEx do
 
   def state, do: GenServer.call(__MODULE__, :state)
 
+  def lookup_gate(name), do: :ets.lookup(ets_name, {name, :gate})
+
   def ets_name, do: :statsig_ex_store
 
   # for debugging
@@ -59,7 +61,7 @@ defmodule StatsigEx do
       )
 
     # should probably crash on startup but be resilient on reload; will fix later
-    config = Jason.decode!(resp.body)
+    config = Jason.decode!(resp.body) |> IO.inspect()
     config |> Map.get("feature_gates", []) |> save_configs(:gate)
     config |> Map.get("dynamic_configs", []) |> save_configs(:config)
 
