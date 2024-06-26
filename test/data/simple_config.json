@@ -1,0 +1,444 @@
+{
+	"dynamic_configs": [],
+	"feature_gates": [
+		{
+			"name": "fail-gate-closed",
+			"type": "feature_gate",
+			"salt": "865b0c18-b57a-4c7d-847c-92eb8ae3e11a",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "p4yrb8GbXSCUQNQjioSil",
+					"passPercentage": 0,
+					"conditions": [
+						{
+							"type": "fail_gate",
+							"targetValue": "nobody",
+							"operator": null,
+							"field": null,
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "p4yrb8GbXSCUQNQjioSil",
+					"salt": "5a869b7f-03e6-4c80-a5d6-23b426a36fa0",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "nobody",
+			"type": "feature_gate",
+			"salt": "9c5f9b51-6d4c-472d-ba1a-e6f5b0993ecb",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "3vPDga7hkXlOKxT9GR3uhq",
+					"passPercentage": 0,
+					"conditions": [
+						{
+							"type": "public",
+							"targetValue": null,
+							"operator": null,
+							"field": null,
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "3vPDga7hkXlOKxT9GR3uhq",
+					"salt": "7b31fb09-419d-4d28-9123-97fd1fba52ca",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "fail-gate-open",
+			"type": "feature_gate",
+			"salt": "8d47da0c-be22-4272-88f7-e766b00bbce9",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "435uEJHKGdmeRiisqEs701",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "fail_gate",
+							"targetValue": "nobody",
+							"operator": null,
+							"field": null,
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "435uEJHKGdmeRiisqEs701",
+					"salt": "34bff9dd-4ae2-4a77-9b44-d35e45322b23",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "pass-gate-0-perc",
+			"type": "feature_gate",
+			"salt": "103e3901-8fd5-4e85-bb8f-5ca5428fff93",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "19OUCt0ITIRplYMycvbDLp",
+					"passPercentage": 0,
+					"conditions": [
+						{
+							"type": "pass_gate",
+							"targetValue": "public",
+							"operator": null,
+							"field": null,
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "19OUCt0ITIRplYMycvbDLp",
+					"salt": "4ee5565f-e1fd-41b7-b1e9-922350f1d54d",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "pass-gate",
+			"type": "feature_gate",
+			"salt": "5373942e-22dd-4eb5-96fe-34b6ac1e03f4",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "6W3UgeqUwog2GCROLYDlaq",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "pass_gate",
+							"targetValue": "public",
+							"operator": null,
+							"field": null,
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "6W3UgeqUwog2GCROLYDlaq",
+					"salt": "855d6f12-05f6-4c17-b1ac-01c8f2ecb131",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "public-1-perc",
+			"type": "feature_gate",
+			"salt": "75def852-ceef-433b-be0e-012d423792b8",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "64MDRA5pUSRyeXS8tm5JIy",
+					"passPercentage": 1,
+					"conditions": [
+						{
+							"type": "public",
+							"targetValue": null,
+							"operator": null,
+							"field": null,
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "64MDRA5pUSRyeXS8tm5JIy",
+					"salt": "fd7d89a1-b805-46fe-b233-0edc17170251",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "public-99-perc",
+			"type": "feature_gate",
+			"salt": "36a3d8b6-6a3d-41b5-824b-a0ef95bbea92",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "48m485Q5VgpKirNiCfMCNK",
+					"passPercentage": 99,
+					"conditions": [
+						{
+							"type": "public",
+							"targetValue": null,
+							"operator": null,
+							"field": null,
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "48m485Q5VgpKirNiCfMCNK",
+					"salt": "4fa3115f-933a-4cdd-92a5-d11870a58efb",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "public-0-perc",
+			"type": "feature_gate",
+			"salt": "3b07047b-9abc-4184-bb73-a2d3d5ccc43e",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "2Rj9Gc9p3NUaMD8ftTi3vH",
+					"passPercentage": 0,
+					"conditions": [
+						{
+							"type": "public",
+							"targetValue": null,
+							"operator": null,
+							"field": null,
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "2Rj9Gc9p3NUaMD8ftTi3vH",
+					"salt": "e430173c-bc79-4d60-929b-3570f04764f2",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "disabled",
+			"type": "feature_gate",
+			"salt": "830a9cf0-68c9-4de6-b1cb-a30d31a9565d",
+			"enabled": false,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "6GglhAz5g366zTlz0ilaSN",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "public",
+							"targetValue": null,
+							"operator": null,
+							"field": null,
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "6GglhAz5g366zTlz0ilaSN",
+					"salt": "eaf6a7dc-47d3-4004-aecf-3f59f329c187",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "multiple_conditions_per_rule",
+			"type": "feature_gate",
+			"salt": "b2432a01-6a04-4420-ba56-7c326cb56ff7",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "6CW5n4MdaulohZcBW0ZfEy",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "user_field",
+							"targetValue": "^p",
+							"operator": "str_matches",
+							"field": "userID",
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						},
+						{
+							"type": "user_field",
+							"targetValue": [
+								"phil"
+							],
+							"operator": "any",
+							"field": "userID",
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "6CW5n4MdaulohZcBW0ZfEy",
+					"salt": "8bd65763-8869-4e40-b519-caf8e4968876",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "public",
+			"type": "feature_gate",
+			"salt": "9ca1832d-6b6b-4872-a753-3bdcb39d3242",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "27SQLVVygIt4V4YLzHayl3",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "public",
+							"targetValue": null,
+							"operator": null,
+							"field": null,
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "27SQLVVygIt4V4YLzHayl3",
+					"salt": "12b30dd8-1c91-4c02-a70e-d16e88a9dfec",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "phil-test",
+			"type": "feature_gate",
+			"salt": "8ec7d4a1-9526-45ec-9424-3238f91990dd",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "hNkxBZcDzHZN75DmZnwm1",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "user_field",
+							"targetValue": [
+								"phil",
+								"testing-with-junk"
+							],
+							"operator": "any",
+							"field": "userID",
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "hNkxBZcDzHZN75DmZnwm1",
+					"salt": "5d546ef7-341b-489b-bdb4-2534aee2d71f",
+					"isDeviceBased": false,
+					"idType": "userID"
+				},
+				{
+					"name": "3BnAGFoSOhh7gpGCjtkdWU",
+					"passPercentage": 10,
+					"conditions": [
+						{
+							"type": "public",
+							"targetValue": null,
+							"operator": null,
+							"field": null,
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "3BnAGFoSOhh7gpGCjtkdWU",
+					"salt": "a7de96a1-2534-4120-91d6-4538284035d6",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		}
+	],
+	"layers": {},
+	"layer_configs": [],
+	"has_updates": true,
+	"time": 1719434311962,
+	"company_id": "26adq53NuHkqUWjKEHQj9c",
+	"id_lists": {},
+	"diagnostics": {
+		"initialize": 10000,
+		"dcs": 1000,
+		"download_config_specs": 1000,
+		"idlist": 100,
+		"get_id_list": 100,
+		"get_id_list_sources": 100,
+		"log": 100,
+		"log_event": 100,
+		"api_call": 100
+	},
+	"sdk_flags": {},
+	"sdk_configs": {
+		"event_queue_size": 500
+	}
+}

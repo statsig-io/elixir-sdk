@@ -1,6 +1,7 @@
 defmodule StatsigEx do
   use GenServer
 
+  # we might need to allow for a name to be passed so we can test things
   def start_link(opts \\ []) do
     # should pull from an env var here
     opts = Keyword.put_new(opts, :api_key, {:env, "STATSIG_API_KEY"})
@@ -24,9 +25,11 @@ defmodule StatsigEx do
     {:ok, Map.put(state, :last_sync, last_sync)}
   end
 
+  def check_flag(user, flag), do: StatsigEx.Evaluator.find_and_eval(user, flag, :gate)
+
   def state, do: GenServer.call(__MODULE__, :state)
 
-  def lookup_gate(name), do: :ets.lookup(ets_name, {name, :gate})
+  def lookup_gate(name), do: :ets.lookup(ets_name(), {name, :gate})
 
   def ets_name, do: :statsig_ex_store
 
@@ -54,14 +57,10 @@ defmodule StatsigEx do
 
   defp reload_configs(api_key, since) do
     # call Statsig API to get configs (eventually we can make the http client configurable)
-    {:ok, resp} =
-      HTTPoison.get(
-        "https://statsigapi.net/v1/download_config_specs?sinceTime=#{since}",
-        [{"STATSIG-API-KEY", api_key}, {"Content-Type", "application/json"}]
-      )
-
     # should probably crash on startup but be resilient on reload; will fix later
-    config = Jason.decode!(resp.body) |> IO.inspect()
+    # |> IO.inspect()
+    {:ok, config} = api_client().download_config_specs(api_key, since)
+
     config |> Map.get("feature_gates", []) |> save_configs(:gate)
     config |> Map.get("dynamic_configs", []) |> save_configs(:config)
 
@@ -77,12 +76,7 @@ defmodule StatsigEx do
     |> Enum.chunk_every(500)
     |> Enum.reduce([], fn chunk, unsent ->
       # this probably doesn't work yet, but I'm not really worried about it right now
-      {:ok, _resp} =
-        HTTPoison.post(
-          "https://statsigapi.net/v1/rgstr",
-          Jason.encode!(%{"events" => chunk}),
-          [{"STATSIG-API-KEY", key}, {"Content-Type", "application/json"}]
-        )
+      {:ok, _resp} = api_client().push_logs(key, chunk)
     end)
   end
 
@@ -97,4 +91,6 @@ defmodule StatsigEx do
   end
 
   defp save_configs([_head | tail], type), do: save_configs(tail, type)
+
+  defp api_client, do: Application.get_env(:statsig_ex, :api_client, StatsigEx.APIClient)
 end

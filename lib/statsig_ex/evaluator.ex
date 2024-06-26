@@ -1,126 +1,117 @@
 defmodule StatsigEx.Evaluator do
-  @example %{
-    "company_id" => "26adq53NuHkqUWjKEHQj9c",
-    "diagnostics" => %{
-      "api_call" => 100,
-      "dcs" => 1000,
-      "download_config_specs" => 1000,
-      "get_id_list" => 100,
-      "get_id_list_sources" => 100,
-      "idlist" => 100,
-      "initialize" => 10000,
-      "log" => 100,
-      "log_event" => 100
-    },
-    "dynamic_configs" => [],
-    "feature_gates" => [
-      %{
-        "defaultValue" => false,
-        "enabled" => true,
-        "entity" => "feature_gate",
-        "idType" => "userID",
-        "isDeviceBased" => false,
-        "name" => "phil-test",
-        "rules" => [
-          %{
-            "conditions" => [
-              %{
-                "additionalValues" => %{},
-                "field" => "userID",
-                "idType" => "userID",
-                "isDeviceBased" => false,
-                "operator" => "any",
-                "targetValue" => ["phil", "testing-with-junk"],
-                "type" => "user_field"
-              }
-            ],
-            "id" => "hNkxBZcDzHZN75DmZnwm1",
-            "idType" => "userID",
-            "isDeviceBased" => false,
-            "name" => "hNkxBZcDzHZN75DmZnwm1",
-            "passPercentage" => 100,
-            "returnValue" => true,
-            "salt" => "5d546ef7-341b-489b-bdb4-2534aee2d71f"
-          },
-          %{
-            "conditions" => [
-              %{
-                "additionalValues" => %{},
-                "field" => nil,
-                "idType" => "userID",
-                "isDeviceBased" => false,
-                "operator" => nil,
-                "targetValue" => nil,
-                "type" => "public"
-              }
-            ],
-            "id" => "3BnAGFoSOhh7gpGCjtkdWU",
-            "idType" => "userID",
-            "isDeviceBased" => false,
-            "name" => "3BnAGFoSOhh7gpGCjtkdWU",
-            "passPercentage" => 10,
-            "returnValue" => true,
-            "salt" => "a7de96a1-2534-4120-91d6-4538284035d6"
-          }
-        ],
-        "salt" => "8ec7d4a1-9526-45ec-9424-3238f91990dd",
-        "type" => "feature_gate"
-      }
-    ],
-    "has_updates" => true,
-    "id_lists" => %{},
-    "layer_configs" => [],
-    "layers" => %{},
-    "sdk_configs" => %{"event_queue_size" => 500},
-    "sdk_flags" => %{},
-    "time" => 1719355460869
-  }
+  # here's what we need to do:
+  # 1. find the rule
+  # 2. iterate through the conditions
+  # 3. record exposures through each condition
+  # 4. store eval result of each rule (should we bail early if a rule returns true? (possibly?))
+  # 5. push exposures as logs at the end of it all
+  # 6. return the tuple result
 
+  # I think I just need to ignore this return value shape for now,
+  # because it's confusing me and holding me back (it doesn't seem consistent anywhere)
+  # {Rule, GateValue, JsonValue, ruleID/reason, Exposures}
+  # {:ok, result, value, exposures}
 
-  # {:ok, rule(?), result, value, reason, exposures}
-  def eval(user, name, type) do
-    case :ets.lookup(Statsig.ets_name(), {name, type}) do
-      [_key, spec] ->
-        # evaluate the rules...?
+  def find_and_eval(user, name, type) do
+    case :ets.lookup(StatsigEx.ets_name(), {name, type}) do
+      [{_key, spec}] ->
         do_eval(user, spec)
 
-      _ ->
-        {:error, false, :not_found}
+      other ->
+        # IO.inspect(other, label: :not_found)
+        # {:ok, false, :not_found}
+        false
     end
   end
 
-  defp do_eval(user, spec,  exposures \\ [])
+  #
+  # {:ok, false, :disabled}
+  defp do_eval(_user, %{"enabled" => false}), do: false
+  defp do_eval(user, %{"rules" => rules} = spec), do: eval_rules(user, rules, spec, [])
 
-  defp do_eval(
+  defp eval_rules(_user, [], _spec, acc) do
+    Enum.any?(acc)
+  end
+
+  defp eval_rules(user, [rule | rest], spec, acc) do
+    # eval rules, and then
+    case eval_one_rule(user, rule, spec) do
+      # once we find a passing rule, move on
+      true ->
+        eval_rules(user, [], spec, [eval_pass_percent(user, rule, spec) | acc])
+
+      result ->
+        eval_rules(user, rest, spec, [result | acc])
+    end
+  end
+
+  defp eval_one_rule(user, %{"conditions" => conds} = rule, spec) do
+    results = eval_conditions(user, conds, rule, spec)
+    Enum.all?(results)
+  end
+
+  defp eval_conditions(user, conds, rule, spec, acc \\ [])
+  defp eval_conditions(_user, [], _rule, _spec, acc), do: acc
+  # public conditions are final, so short-circuit this and return
+  defp eval_conditions(user, [%{"type" => "public"} | _rest], rule, spec, acc),
+    do: [eval_pass_percent(user, rule, spec) | acc]
+
+  defp eval_conditions(
          user,
-         %{"enabled" => true, "rules" => rules, "defaultValue" => default},
-         exposures
-       ),
-       do: eval_rules(user, default, rules, exposures)
+         [%{"type" => "pass_gate", "targetValue" => gate} | rest],
+         rule,
+         spec,
+         acc
+       ) do
+    result =
+      case find_and_eval(user, gate, :gate) do
+        true -> eval_pass_percent(user, rule, spec)
+        _ -> false
+      end
 
-  defp do_eval(user,  _disabled, exposures), do: {:ok, false, :disabled}
-
-  defp eval_rules(user, result, [], exposures), do: {:ok, result}
-
-  defp eval_rules(user, default, [rule | rest], exposures) do
-    conds = Map.get(rule, "conditions", [])
-    results = Enum.map(conds, fn c -> eval_condition(user, c) end)
+    eval_conditions(user, rest, rule, spec, [result | acc])
   end
 
-  defp eval_condition(user, condition) do
-    # case get_evaluation_value(user, condition) do
-    #   {_, false, value, exposures} -> {get_evaluation_comparison(condition, value), exposures}
-    #   {result, _, _, exposures} -> {result, exposures}
-    # end
+  defp eval_conditions(
+         user,
+         [%{"type" => "fail_gate", "targetValue" => gate} | rest],
+         rule,
+         spec,
+         acc
+       ) do
+    result =
+      case find_and_eval(user, gate, :gate) do
+        false -> eval_pass_percent(user, rule, spec)
+        _ -> false
+      end
+
+    eval_conditions(user, rest, rule, spec, [result | acc])
   end
 
-  defp get_evaluation_value(_, %{"type" => "public"}), do: {true, true, nil, []}
+  defp eval_pass_percent(_user, %{"passPercentage" => 100}, _spec), do: true
+  defp eval_pass_percent(_user, %{"passPercentage" => 0}, _spec), do: false
 
-  defp get_evaluation_value(_, %{"type" => "current_time"}),
-    do: {false, false, DateTime.to_unix(DateTime.utc_now()), []}
+  defp eval_pass_percent(user, %{"passPercentage" => perc, "idType" => prop} = rule, spec) do
+    spec_salt = Map.get(spec, "salt", Map.get(spec, "id", ""))
+    rule_salt = Map.get(rule, "salt", Map.get(rule, "id", ""))
+    id = get_user_id(user, prop)
+    hash = user_hash("#{spec_salt}.#{rule_salt}.#{id}")
+    rem(hash, 10_000) < perc * 100
+  end
 
-  defp get_evaluation_value(user, %{"type" => "pass_gate", "targetValue" => target}) do
-    # alias for another gate, I guess?
-    eval(user, target, :gate)
+  defp user_hash(s) do
+    <<hash::size(64), _rest::binary>> = :crypto.hash(:sha256, s)
+    hash
+  end
+
+  defp get_user_id(user, prop), do: try_get_with_lower(user, prop) |> to_string()
+
+  defp try_get_with_lower(obj, prop) do
+    lower = String.downcase(prop)
+
+    case Map.get(obj, prop) do
+      x when x == nil or x == [] or x == "" -> Map.get(obj, lower)
+      x -> x
+    end
   end
 end
