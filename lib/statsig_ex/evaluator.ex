@@ -1,11 +1,6 @@
 defmodule StatsigEx.Evaluator do
-  # here's what we need to do:
-  # 1. find the rule
-  # 2. iterate through the conditions
-  # 3. record exposures through each condition
-  # 4. store eval result of each rule (should we bail early if a rule returns true? (possibly?))
-  # 5. push exposures as logs at the end of it all
-  # 6. return the tuple result
+  # here's what I sitll need to do:
+  # * log exposures
 
   # I think I just need to ignore this return value shape for now,
   # because it's confusing me and holding me back (it doesn't seem consistent anywhere)
@@ -108,7 +103,11 @@ defmodule StatsigEx.Evaluator do
     do: get_env_field(user, field)
 
   defp extract_value_to_compare(_user, %{"type" => "current_time"}),
-    do: DateTime.utc_now() |> DateTime.to_unix(:millisecond)
+    do: DateTime.utc_now() |> DateTime.to_unix(:millisecond) |> IO.inspect(label: :current)
+
+  defp extract_value_to_compare(user, %{"type" => "unit_id", "idType" => id_type}) do
+    get_user_id(user, id_type)
+  end
 
   defp eval_pass_percent(_user, %{"passPercentage" => 100}, _spec), do: true
   defp eval_pass_percent(_user, %{"passPercentage" => 0}, _spec), do: false
@@ -121,13 +120,65 @@ defmodule StatsigEx.Evaluator do
     rem(hash, 10_000) < perc * 100
   end
 
-  defp compare(val, target, "any") when is_list(target),
+  # if either is nil, the comparison should fail
+  defp compare(val, target, _) when is_nil(val) or is_nil(target), do: false
+
+  # make sure "any" is comparing a list
+  defp compare(val, target, "any") when not is_list(target), do: compare(val, [target], "any")
+
+  defp compare(val, target, op) when op in ["any", "any_case_sensitive"],
     do: Enum.any?(target, fn t -> val == t end)
 
-  defp compare(val, target, "any"), do: compare(val, [target], "any")
+  # basically the opposite of "any"
+  defp compare(val, target, op) when op in ["none", "none_case_sensitive"],
+    do: !compare(val, target, "any")
 
+  defp compare(val, target, "str_starts_with_any") do
+    Enum.any?(target, fn t -> String.starts_with?(val, t) end)
+  end
+
+  defp compare(val, target, "str_ends_with_any") do
+    Enum.any?(target, fn t -> String.ends_with?(val, t) end)
+  end
+
+  defp compare(val, target, "str_contains_any") do
+    Enum.any?(target, fn t -> String.contains?(val, t) end)
+  end
+
+  defp compare(val, target, "str_contains_none"), do: !compare(val, target, "str_contains_any")
+
+  defp compare(val, target, "str_matches") do
+    # make sure the regex can compile
+    case Regex.compile(target) do
+      {:ok, r} ->
+        Regex.match?(r, val)
+
+      _ ->
+        false
+    end
+  end
+
+  defp compare(val, target, "on") do
+    {:ok, vd} = DateTime.from_unix(val, :millisecond)
+    {:ok, td} = DateTime.from_unix(target, :millisecond)
+    vd.year == td.year && vd.month == td.month && vd.day == td.day
+  end
+
+  # we probably need to do some type checking here, so we don't compare values of different types
   defp compare(val, target, "after"), do: val > target
   defp compare(val, target, "before"), do: val < target
+
+  defp compare(val, target, "eq"), do: val == target
+  defp compare(val, target, "neq"), do: val != target
+  defp compare(val, target, "gt"), do: val > target
+  defp compare(val, target, "lt"), do: val < target
+  defp compare(val, target, "lte"), do: val <= target
+  defp compare(val, target, "gte"), do: val >= target
+
+  defp compare(_, _, op) do
+    IO.inspect(op, label: :unsupported_compare)
+    false
+  end
 
   defp user_hash(s) do
     <<hash::size(64), _rest::binary>> = :crypto.hash(:sha256, s)

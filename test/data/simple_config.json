@@ -2,6 +2,42 @@
 	"dynamic_configs": [],
 	"feature_gates": [
 		{
+			"name": "customer-id-in-list",
+			"type": "feature_gate",
+			"salt": "d0c226db-b874-446f-ab15-34989e01debb",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "2AYqq3FV8zBVyikKhDnlFz",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "unit_id",
+							"targetValue": [
+								"123"
+							],
+							"operator": "any",
+							"field": "customerId",
+							"additionalValues": {
+								"custom_id": "customerId"
+							},
+							"isDeviceBased": false,
+							"idType": "customerId"
+						}
+					],
+					"returnValue": true,
+					"id": "2AYqq3FV8zBVyikKhDnlFz",
+					"salt": "8e878289-9d9e-4fb4-ad3b-17a482bed3fd",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
 			"name": "simple-segment",
 			"type": "feature_gate",
 			"salt": "8b6692b7-f2ee-4613-b284-225a13e3e04d",
@@ -593,7 +629,7 @@
 	"layers": {},
 	"layer_configs": [],
 	"has_updates": true,
-	"time": 1719437649410,
+	"time": 1719438727749,
 	"company_id": "26adq53NuHkqUWjKEHQj9c",
 	"id_lists": {},
 	"diagnostics": {

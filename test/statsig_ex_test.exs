@@ -80,4 +80,18 @@ defmodule StatsigExTest do
       assert StatsigEx.check_flag(%{"userID" => "phil"}, "simple-segment")
     end
   end
+
+  describe "customer ID gate" do
+    test "is in list" do
+      assert StatsigEx.check_flag(
+               %{
+                 "customIDs" => %{
+                   "customerId" => "123"
+                 },
+                 "userID" => "any"
+               },
+               "customer-id-in-list"
+             )
+    end
+  end
 end
