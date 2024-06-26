@@ -2,6 +2,140 @@
 	"dynamic_configs": [],
 	"feature_gates": [
 		{
+			"name": "simple-segment",
+			"type": "feature_gate",
+			"salt": "8b6692b7-f2ee-4613-b284-225a13e3e04d",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "2i7Iqq5DpOuuXTgRJ550ne",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "pass_gate",
+							"targetValue": "segment:simple_conditional_segment",
+							"operator": null,
+							"field": null,
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "2i7Iqq5DpOuuXTgRJ550ne",
+					"salt": "401143fb-c4d4-4c6c-96d9-3c0ab688d938",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "time-after-x",
+			"type": "feature_gate",
+			"salt": "7c984fcd-8621-4668-ba77-758fbf38c371",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "5vVrrxHNwDy4qcDJcPRfD7",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "current_time",
+							"targetValue": 1717218000000,
+							"operator": "after",
+							"field": null,
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "5vVrrxHNwDy4qcDJcPRfD7",
+					"salt": "6a8b4465-72eb-4c39-bacf-78305a9d3c08",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "env-field-production-tier-is-in",
+			"type": "feature_gate",
+			"salt": "d3ef816e-78ea-4945-a853-7fc6c717c329",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "7dRqc4WjzCCGg9uZ44fxjz",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "environment_field",
+							"targetValue": [
+								"production"
+							],
+							"operator": "any",
+							"field": "tier",
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "7dRqc4WjzCCGg9uZ44fxjz",
+					"salt": "7cfd3a44-797c-4be4-88fb-0377253046c3",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "user-field-userid-is-in",
+			"type": "feature_gate",
+			"salt": "2b4b6bd2-f50c-4144-b008-07be6557fa00",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "1YKaUn5TvIhTMGz5IkQxoQ",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "user_field",
+							"targetValue": [
+								"phil",
+								"test",
+								"statsig"
+							],
+							"operator": "any",
+							"field": "userID",
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "1YKaUn5TvIhTMGz5IkQxoQ",
+					"salt": "d0bd8375-2303-4cad-bf04-d3b1a5a415c5",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
 			"name": "fail-gate-closed",
 			"type": "feature_gate",
 			"salt": "865b0c18-b57a-4c7d-847c-92eb8ae3e11a",
@@ -418,12 +552,48 @@
 			"isDeviceBased": false,
 			"idType": "userID",
 			"entity": "feature_gate"
+		},
+		{
+			"name": "segment:simple_conditional_segment",
+			"type": "feature_gate",
+			"salt": "d0ad546f-26de-4b07-a044-62299d818839",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "6pkWfnXCcOJD4w1r7bK1MA",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "user_field",
+							"targetValue": [
+								"phil",
+								"test",
+								"simple"
+							],
+							"operator": "any",
+							"field": "userID",
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "6pkWfnXCcOJD4w1r7bK1MA",
+					"salt": "852d38d3-06d7-428a-8176-95f993af0fdd",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "segment"
 		}
 	],
 	"layers": {},
 	"layer_configs": [],
 	"has_updates": true,
-	"time": 1719434311962,
+	"time": 1719437649410,
 	"company_id": "26adq53NuHkqUWjKEHQj9c",
 	"id_lists": {},
 	"diagnostics": {

@@ -49,4 +49,35 @@ defmodule StatsigExTest do
       refute StatsigEx.check_flag(%{"userID" => "phil"}, "fail-gate-closed")
     end
   end
+
+  describe "user_field gate" do
+    test "user ID is in list" do
+      assert StatsigEx.check_flag(%{"userID" => "phil"}, "user-field-userid-is-in")
+    end
+
+    test "user ID is NOT in the list" do
+      refute StatsigEx.check_flag(%{"userID" => "nope"}, "user-field-userid-is-in")
+    end
+  end
+
+  describe "environment_field gate" do
+    test "environment value is in list" do
+      assert StatsigEx.check_flag(
+               %{"userID" => "test", "statsigEnvironment" => %{"tier" => "production"}},
+               "env-field-production-tier-is-in"
+             )
+    end
+  end
+
+  describe "current_time gate" do
+    test "time is after 6/1/24" do
+      assert StatsigEx.check_flag(%{}, "time-after-x")
+    end
+  end
+
+  describe "segments" do
+    test "simple conditional segment" do
+      assert StatsigEx.check_flag(%{"userID" => "phil"}, "simple-segment")
+    end
+  end
 end
