@@ -25,7 +25,11 @@ defmodule StatsigEx do
     {:ok, Map.put(state, :last_sync, last_sync)}
   end
 
-  def check_flag(user, flag), do: StatsigEx.Evaluator.find_and_eval(user, flag, :gate)
+  def check_flag(user, flag) do
+    {result, _rule_id, exposures} = StatsigEx.Evaluator.find_and_eval(user, flag, :gate)
+    # log_exposures(user, exposures)
+    result
+  end
 
   def state, do: GenServer.call(__MODULE__, :state)
 
@@ -58,7 +62,6 @@ defmodule StatsigEx do
   defp reload_configs(api_key, since) do
     # call Statsig API to get configs (eventually we can make the http client configurable)
     # should probably crash on startup but be resilient on reload; will fix later
-    # |> IO.inspect()
     {:ok, config} = api_client().download_config_specs(api_key, since)
 
     config |> Map.get("feature_gates", []) |> save_configs(:gate)

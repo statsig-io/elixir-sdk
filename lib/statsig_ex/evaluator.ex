@@ -12,25 +12,38 @@ defmodule StatsigEx.Evaluator do
   def find_and_eval(user, name, type) do
     case :ets.lookup(StatsigEx.ets_name(), {name, type}) do
       [{_key, spec}] ->
-        do_eval(user, spec)
+        {result, rule_id, exp} = do_eval(user, spec)
+        # should we actually log this exposure in the do_eval function instead...?
+        {result, rule_id,
+         [%{"gate" => name, "gateValue" => to_string(result), "ruleID" => rule_id} | exp]}
 
       _other ->
         # {:ok, false, :not_found}
-        false
+        {false, nil, []}
     end
   end
 
-  defp do_eval(_user, %{"enabled" => false}), do: false
+  # hrm, should this log an exposure...?
+  defp do_eval(_user, %{"enabled" => false}), do: {false, nil, []}
   defp do_eval(user, %{"rules" => rules} = spec), do: eval_rules(user, rules, spec, [])
 
-  defp eval_rules(_user, [], _spec, acc), do: Enum.any?(acc)
+  defp eval_rules(_user, [], _spec, results) do
+    # combine all the exposures and calculate result
+    # only one rule needs to pass
+    Enum.reduce(results, {false, nil, []}, fn {result, rid, exposures},
+                                              {running_result, running_rid, acc} ->
+      {result || running_result, running_rid || rid, exposures ++ acc}
+    end)
+  end
 
   defp eval_rules(user, [rule | rest], spec, acc) do
     # eval rules, and then
     case eval_one_rule(user, rule, spec) do
       # once we find a passing rule, move on
-      true ->
-        eval_rules(user, [], spec, [eval_pass_percent(user, rule, spec) | acc])
+      {true, rid, exp} ->
+        eval_rules(user, [], spec, [
+          {eval_pass_percent(user, rule, spec), rid, exp} | acc
+        ])
 
       result ->
         eval_rules(user, rest, spec, [result | acc])
@@ -39,14 +52,18 @@ defmodule StatsigEx.Evaluator do
 
   defp eval_one_rule(user, %{"conditions" => conds} = rule, spec) do
     results = eval_conditions(user, conds, rule, spec)
-    Enum.all?(results)
+
+    Enum.reduce(results, {true, nil, []}, fn {result, rid, exp},
+                                             {running_result, running_rid, acc} ->
+      {result && running_result, running_rid || rid, exp ++ acc}
+    end)
   end
 
   defp eval_conditions(user, conds, rule, spec, acc \\ [])
   defp eval_conditions(_user, [], _rule, _spec, acc), do: acc
   # public conditions are final, so short-circuit this and return
   defp eval_conditions(user, [%{"type" => "public"} | _rest], rule, spec, acc),
-    do: [eval_pass_percent(user, rule, spec) | acc]
+    do: [{eval_pass_percent(user, rule, spec), Map.get(rule, "id"), []} | acc]
 
   defp eval_conditions(
          user,
@@ -57,8 +74,8 @@ defmodule StatsigEx.Evaluator do
        ) do
     result =
       case find_and_eval(user, gate, :gate) do
-        true -> eval_pass_percent(user, rule, spec)
-        _ -> false
+        {true, rid, exp} -> {eval_pass_percent(user, rule, spec), rid, exp}
+        other -> other
       end
 
     eval_conditions(user, rest, rule, spec, [result | acc])
@@ -72,9 +89,10 @@ defmodule StatsigEx.Evaluator do
          acc
        ) do
     result =
-      case not find_and_eval(user, gate, :gate) do
-        true -> eval_pass_percent(user, rule, spec)
-        _ -> false
+      case find_and_eval(user, gate, :gate) do
+        # false is a pass, since this is a FAIL gate check
+        {false, rid, exp} -> {eval_pass_percent(user, rule, spec), rid, exp}
+        {true, rid, exp} -> {false, rid, exp}
       end
 
     eval_conditions(user, rest, rule, spec, [result | acc])
@@ -91,8 +109,8 @@ defmodule StatsigEx.Evaluator do
 
     result =
       case compare(val, target, op) do
-        true -> eval_pass_percent(user, rule, spec)
-        _ -> false
+        true -> {eval_pass_percent(user, rule, spec), Map.get(rule, "id"), []}
+        r -> {r, Map.get(rule, "id"), []}
       end
 
     eval_conditions(user, rest, rule, spec, [result | acc])
