@@ -2,6 +2,70 @@
 	"dynamic_configs": [],
 	"feature_gates": [
 		{
+			"name": "version-less-than",
+			"type": "feature_gate",
+			"salt": "93972762-4f1c-49b8-b7df-1b156976bc41",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "xeBWOdCS8b8IbvPYu9p1o",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "user_field",
+							"targetValue": "0.7.0-beta",
+							"operator": "version_lt",
+							"field": "appVersion",
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "xeBWOdCS8b8IbvPYu9p1o",
+					"salt": "7b17d481-3fe1-4283-a175-8c63f1b7609a",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
+			"name": "version-greater-than",
+			"type": "feature_gate",
+			"salt": "0c6f7234-3df9-4d08-996e-1e47c3217f44",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "fnwHE25wMYrJpmzEIaWUc",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "user_field",
+							"targetValue": "1.1.0",
+							"operator": "version_gt",
+							"field": "appVersion",
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "fnwHE25wMYrJpmzEIaWUc",
+					"salt": "0e8eff04-8c3a-4aa0-bfed-8e2d53609e09",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
 			"name": "customer-id-in-list",
 			"type": "feature_gate",
 			"salt": "d0c226db-b874-446f-ab15-34989e01debb",
@@ -629,7 +693,7 @@
 	"layers": {},
 	"layer_configs": [],
 	"has_updates": true,
-	"time": 1719438727749,
+	"time": 1719504327177,
 	"company_id": "26adq53NuHkqUWjKEHQj9c",
 	"id_lists": {},
 	"diagnostics": {

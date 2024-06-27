@@ -94,4 +94,17 @@ defmodule StatsigExTest do
              )
     end
   end
+
+  describe "version compares" do
+    test "greater than version works as expected" do
+      assert StatsigEx.check_flag(%{"appVersion" => "1.1.1"}, "version-greater-than")
+      refute StatsigEx.check_flag(%{"appVersion" => "0.9.0"}, "version-greater-than")
+    end
+
+    test "less than version works as expected" do
+      refute StatsigEx.check_flag(%{"appVersion" => "1.8.2"}, "version-less-than")
+      assert StatsigEx.check_flag(%{"appVersion" => "0.7.0-alpha"}, "version-less-than")
+      assert StatsigEx.check_flag(%{"appVersion" => "0.6.9"}, "version-less-than")
+    end
+  end
 end

@@ -103,7 +103,7 @@ defmodule StatsigEx.Evaluator do
     do: get_env_field(user, field)
 
   defp extract_value_to_compare(_user, %{"type" => "current_time"}),
-    do: DateTime.utc_now() |> DateTime.to_unix(:millisecond) |> IO.inspect(label: :current)
+    do: DateTime.utc_now() |> DateTime.to_unix(:millisecond)
 
   defp extract_value_to_compare(user, %{"type" => "unit_id", "idType" => id_type}) do
     get_user_id(user, id_type)
@@ -175,10 +175,34 @@ defmodule StatsigEx.Evaluator do
   defp compare(val, target, "lte"), do: val <= target
   defp compare(val, target, "gte"), do: val >= target
 
+  defp compare(val, target, <<"version_", type::binary>>) do
+    # we need to manually parse versions first to avoid raising Version.InvalidVersionError
+    # we might consider padding as needed to make version strings all the right length
+    case [Version.parse(val), Version.parse(target)] do
+      [{:ok, v}, {:ok, t}] ->
+        compare_versions(v, t, type)
+
+      _ ->
+        IO.inspect([val, target], label: :invalid_version)
+        false
+    end
+  end
+
   defp compare(_, _, op) do
     IO.inspect(op, label: :unsupported_compare)
     false
   end
+
+  defp compare_versions(val, target, "gt"), do: Version.compare(val, target) == :gt
+  defp compare_versions(val, target, "lt"), do: Version.compare(val, target) == :lt
+  defp compare_versions(val, target, "eq"), do: Version.compare(val, target) == :eq
+  defp compare_versions(val, target, "neq"), do: Version.compare(val, target) != :eq
+
+  defp compare_versions(val, target, "gte"),
+    do: Enum.member?([:gt, :eq], Version.compare(val, target))
+
+  defp compare_versions(val, target, "lte"),
+    do: Enum.member?([:lt, :eq], Version.compare(val, target))
 
   defp user_hash(s) do
     <<hash::size(64), _rest::binary>> = :crypto.hash(:sha256, s)
