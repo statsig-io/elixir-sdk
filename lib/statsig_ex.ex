@@ -26,8 +26,9 @@ defmodule StatsigEx do
   end
 
   def check_flag(user, flag) do
-    {result, _rule_id, exposures} = StatsigEx.Evaluator.find_and_eval(user, flag, :gate)
-    # log_exposures(user, exposures)
+    # |> IO.inspect()
+    {result, _rule, _exposures} = StatsigEx.Evaluator.find_and_eval(user, flag, :gate)
+
     result
   end
 
