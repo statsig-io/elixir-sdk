@@ -1,6 +1,8 @@
 defmodule StatsigEx.Evaluator do
   # here's what I sitll need to do:
-  # * log exposures
+  # * log exposures. These are logs of the gates / configs that are evaluated,
+  #   so each gate / config eval should have one primary exposure and N secondary
+  #   exposures (one for each pass/fail gate conditions encountered along the way)
 
   # I think I just need to ignore this return value shape for now,
   # because it's confusing me and holding me back (it doesn't seem consistent anywhere)
