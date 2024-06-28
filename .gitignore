@@ -21,4 +21,5 @@ erl_crash.dump
 
 # Ignore package tarball (built via "mix hex.build").
 statsig_ex-*.tar
+*.beam
 

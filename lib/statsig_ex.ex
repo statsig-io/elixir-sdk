@@ -31,9 +31,9 @@ defmodule StatsigEx do
   end
 
   def get_config(user, config) do
-    {_result, value, _rule, _exposures} = StatsigEx.Evaluator.find_and_eval(user, config, :config)
+    {_result, value, rule, _exposures} = StatsigEx.Evaluator.find_and_eval(user, config, :config)
 
-    value
+    %{rule_id: Map.get(rule, "id"), value: value}
   end
 
   def get_experiment(user, exp), do: get_config(user, exp)

@@ -110,19 +110,21 @@ defmodule StatsigExTest do
 
   describe "dynamic configs" do
     test "basic props pass" do
-      assert %{"hello" => "world"} == StatsigEx.get_config(%{"userID" => "pass"}, "basic-props")
+      assert %{value: %{"hello" => "world"}} =
+               StatsigEx.get_config(%{"userID" => "pass"}, "basic-props")
     end
 
     test "basic props fail" do
-      assert %{"hello" => "nobody"} == StatsigEx.get_config(%{}, "basic-props")
+      assert %{value: %{"hello" => "nobody"}} = StatsigEx.get_config(%{}, "basic-props")
     end
   end
 
   describe "experiments" do
     test "basic 50/50 test returns expected value" do
-      assert %{"test" => "test"} == StatsigEx.get_experiment(%{}, "basic-a-b")
+      assert %{value: %{"test" => "test"}} = StatsigEx.get_experiment(%{}, "basic-a-b")
       # just so happens that this particular userID hashes to a value that is in the control
-      assert %{"test" => "control"} == StatsigEx.get_config(%{"userID" => "control"}, "basic-a-b")
+      assert %{value: %{"test" => "control"}} =
+               StatsigEx.get_config(%{"userID" => "control"}, "basic-a-b")
     end
 
     @tag :flakey
@@ -138,6 +140,38 @@ defmodule StatsigExTest do
         end)
 
       assert test / control > 0.95 && test / control < 1.05
+    end
+  end
+
+  describe "vs. the erlang client" do
+    test "non-existent gate" do
+      {user, gate} = {%{"userID" => "whatever"}, "doesnt-exist-anywhere"}
+      assert StatsigEx.check_flag(user, gate) == :statsig.check_gate(user, gate)
+    end
+
+    test "disabled flag" do
+      {user, gate} = {%{"userID" => "anyone"}, "disabled"}
+      assert StatsigEx.check_flag(user, gate) == :statsig.check_gate(user, gate)
+    end
+
+    test "segmentation of experiment is exactly the same" do
+      gate = "basic-a-b"
+
+      {misses, results} =
+        Enum.reduce(1..10_000, {0, []}, fn _, {miss, results} ->
+          id = :crypto.strong_rand_bytes(10) |> Base.encode64()
+          user = %{"userID" => id}
+          ex = StatsigEx.get_experiment(user, gate)
+          erl = :statsig.get_experiment(user, gate)
+
+          case {Map.values(ex), Map.values(erl)} do
+            {a, b} when a == b -> {miss, [{ex, erl} | results]}
+            {a, b} -> {miss + 1, [{ex, erl} | results]}
+          end
+        end)
+
+      assert misses == 0,
+             "expected no mismatches, but got #{misses} : #{inspect(hd(results))}"
     end
   end
 end
