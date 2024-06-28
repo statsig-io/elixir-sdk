@@ -128,7 +128,7 @@ defmodule StatsigExTest do
     @tag :flakey
     test "segmentation for basic 50/50 test is in expected tolerances" do
       {test, control} =
-        Enum.reduce(1..10_000, {0, 0}, fn i, {t, c} ->
+        Enum.reduce(1..10_000, {0, 0}, fn _, {t, c} ->
           id = :crypto.strong_rand_bytes(10) |> Base.encode64()
 
           case StatsigEx.get_experiment(%{"userID" => id}, "basic-a-b") do

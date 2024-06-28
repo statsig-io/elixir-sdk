@@ -28,7 +28,8 @@ defmodule StatsigEx.MixProject do
   defp deps do
     [
       {:httpoison, "~> 1.4"},
-      {:jason, "~> 1.2"}
+      {:jason, "~> 1.2"},
+      {:statsig, path: "./statsig_erl", only: [:test]}
     ]
   end
 end
