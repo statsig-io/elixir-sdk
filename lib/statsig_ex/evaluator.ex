@@ -1,8 +1,15 @@
 defmodule StatsigEx.Evaluator do
   # here's what I sitll need to do:
-  # * log exposures. These are logs of the gates / configs that are evaluated,
+  # * actually log exposures. These are logs of the gates / configs that are evaluated,
   #   so each gate / config eval should have one primary exposure and N secondary
-  #   exposures (one for each pass/fail gate conditions encountered along the way)
+  #   exposures (one for each pass/fail gate conditions encountered along the way).
+  #   Exposures are returned from the evaluator, but I currently just drop them
+  # * add env/tier ("statsigEnvironment") attribute to users (probably pulled in
+  #   from application env)
+  # * add metadata headers (sdk version, etc) to API calls
+  # * rejigger the http/api client stuff to possibly be more configurable
+  # * decide if I want to spin up a supervisor & the genserver automatically
+  #   or just continue to have apps call start_link themselves
 
   # I think I just need to ignore this return value shape for now,
   # because it's confusing me and holding me back (it doesn't seem consistent anywhere)
