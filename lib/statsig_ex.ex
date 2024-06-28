@@ -26,12 +26,14 @@ defmodule StatsigEx do
   end
 
   def check_gate(user, gate) do
-    {result, _value, _rule, _exposures} = StatsigEx.Evaluator.find_and_eval(user, gate, :gate)
+    {result, _value, _rule, exposures} = StatsigEx.Evaluator.find_and_eval(user, gate, :gate)
+    log_exposures(user, exposures, :gate)
     result
   end
 
   def get_config(user, config) do
-    {_result, value, rule, _exposures} = StatsigEx.Evaluator.find_and_eval(user, config, :config)
+    {_result, value, rule, exposures} = StatsigEx.Evaluator.find_and_eval(user, config, :config)
+    log_exposures(user, exposures, :config)
 
     %{rule_id: Map.get(rule, "id"), value: value}
   end
@@ -48,6 +50,11 @@ defmodule StatsigEx do
   # for debugging
   def handle_call(:state, _from, state) do
     {:reply, state, state}
+  end
+
+  def handle_call(:flush, _from, %{api_key: key, events: events} = state) do
+    unsent = flush_events(key, events)
+    {:reply, unsent, Map.put(state, :events, unsent)}
   end
 
   def handle_call({:log, event}, _from, state) do
@@ -67,6 +74,20 @@ defmodule StatsigEx do
     {:noreply, Map.put(state, :events, remaining)}
   end
 
+  defp log_exposures(_user, [], _type), do: :ok
+
+  defp log_exposures(user, [primary | secondary], _type) do
+    event = %{
+      "eventName" => "statsig::gate_exposure",
+      "metadata" => primary,
+      "secondaryExposures" => secondary,
+      "time" => DateTime.utc_now() |> DateTime.to_unix(:millisecond),
+      "user" => user
+    }
+
+    GenServer.call(__MODULE__, {:log, event})
+  end
+
   defp reload_configs(api_key, since) do
     # call Statsig API to get configs (eventually we can make the http client configurable)
     # should probably crash on startup but be resilient on reload; will fix later
@@ -79,16 +100,20 @@ defmodule StatsigEx do
     {:ok, Map.get(config, "time", since)}
   end
 
-  def flush_events(_key, []), do: []
+  def flush, do: GenServer.call(__MODULE__, :flush)
 
-  def flush_events(key, events) do
+  defp flush_events(_key, []), do: []
+
+  defp flush_events(key, events) do
     # send in batches; keep any that fail
     events
     |> Enum.chunk_every(500)
     |> Enum.reduce([], fn chunk, unsent ->
       # this probably doesn't work yet, but I'm not really worried about it right now
-      {:ok, _resp} = api_client().push_logs(key, chunk)
+      {:ok, resp} = api_client().push_logs(key, chunk)
+      [resp | unsent]
     end)
+    |> List.flatten()
   end
 
   defp get_api_key({:env, var}), do: System.get_env(var)

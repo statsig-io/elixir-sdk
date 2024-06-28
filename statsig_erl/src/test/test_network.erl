@@ -2,6 +2,8 @@
 
 -export([request/3]).
 
+request(_APIKey, "rgstr", _Input) ->
+    [];
 request(_APIKey, _Endpoint, _Input) ->
     erlang:display("using the test network client"),
     % this only works when running tests from the root statsig_ex directory

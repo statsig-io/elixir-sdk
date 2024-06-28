@@ -64,6 +64,8 @@ handle_info(flush, [{log_events, Events}, {api_key, ApiKey}, {last_sync_time, Ti
 handle_info(_In, State) ->
     {noreply, State}.
 
+handle_call({state}, _From, State) ->
+    {reply, State, State};
 handle_call({flush}, _From, [{log_events, Events}, {api_key, ApiKey}, {last_sync_time, Time}]) ->
     Unsent = handle_events(Events, ApiKey),
     {reply, length(Unsent), [{log_events, Unsent}, {api_key, ApiKey}, {last_sync_time, Time}]};

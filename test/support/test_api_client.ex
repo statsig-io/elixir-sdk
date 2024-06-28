@@ -11,8 +11,7 @@ defmodule TestAPIClient do
     {:ok, %{"has_updates" => false}}
   end
 
-  def push_logs(_key, logs) do
-    IO.inspect(logs, label: :log_push)
+  def push_logs(_key, _logs) do
     {:ok, []}
   end
 end
