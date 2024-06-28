@@ -163,6 +163,16 @@ defmodule StatsigEx.Evaluator do
     get_user_id(user, id_type)
   end
 
+  defp extract_value_to_compare(user, %{
+         "type" => "user_bucket",
+         "additionalValues" => %{"salt" => salt},
+         "idType" => id_type
+       }) do
+    id = get_user_id(user, id_type)
+    hash = user_hash("#{salt}.#{id}")
+    rem(hash, 1_000)
+  end
+
   defp eval_pass_percent(_user, %{"passPercentage" => 100}, _spec), do: true
   defp eval_pass_percent(_user, %{"passPercentage" => 0}, _spec), do: false
 

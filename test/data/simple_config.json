@@ -37,6 +37,96 @@
 			"isDeviceBased": false,
 			"idType": "userID",
 			"entity": "dynamic_config"
+		},
+		{
+			"name": "basic-a-b",
+			"type": "dynamic_config",
+			"salt": "c3843fd1-d740-425a-a81c-bd6235923768",
+			"enabled": true,
+			"defaultValue": {},
+			"rules": [
+				{
+					"name": "layerAssignment",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "user_bucket",
+							"targetValue": [
+								-1
+							],
+							"operator": "any",
+							"field": null,
+							"additionalValues": {
+								"salt": "0e9701a1-1fe5-4306-b591-6e7c6a6359ed"
+							},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": {},
+					"id": "layerAssignment",
+					"salt": "",
+					"isDeviceBased": false,
+					"idType": "userID"
+				},
+				{
+					"name": "5UnEcjCanAt09JUoUmN9Mx",
+					"groupName": "Control",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "user_bucket",
+							"targetValue": 500,
+							"operator": "lt",
+							"field": null,
+							"additionalValues": {
+								"salt": "c3843fd1-d740-425a-a81c-bd6235923768"
+							},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": {
+						"test": "control"
+					},
+					"id": "5UnEcjCanAt09JUoUmN9Mx",
+					"salt": "5UnEcjCanAt09JUoUmN9Mx",
+					"isDeviceBased": false,
+					"idType": "userID",
+					"isExperimentGroup": true
+				},
+				{
+					"name": "5UnEclhcPSCut9skvuIN5z",
+					"groupName": "Test",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "user_bucket",
+							"targetValue": 1000,
+							"operator": "lt",
+							"field": null,
+							"additionalValues": {
+								"salt": "c3843fd1-d740-425a-a81c-bd6235923768"
+							},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": {
+						"test": "test"
+					},
+					"id": "5UnEclhcPSCut9skvuIN5z",
+					"salt": "5UnEclhcPSCut9skvuIN5z",
+					"isDeviceBased": false,
+					"idType": "userID",
+					"isExperimentGroup": true
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "experiment",
+			"isActive": true,
+			"hasSharedParams": false
 		}
 	],
 	"feature_gates": [
@@ -732,7 +822,7 @@
 	"layers": {},
 	"layer_configs": [],
 	"has_updates": true,
-	"time": 1719543196915,
+	"time": 1719543503162,
 	"company_id": "26adq53NuHkqUWjKEHQj9c",
 	"id_lists": {},
 	"diagnostics": {

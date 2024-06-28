@@ -117,4 +117,27 @@ defmodule StatsigExTest do
       assert %{"hello" => "nobody"} == StatsigEx.get_config(%{}, "basic-props")
     end
   end
+
+  describe "experiments" do
+    test "basic 50/50 test returns expected value" do
+      assert %{"test" => "test"} == StatsigEx.get_experiment(%{}, "basic-a-b")
+      # just so happens that this particular userID hashes to a value that is in the control
+      assert %{"test" => "control"} == StatsigEx.get_config(%{"userID" => "control"}, "basic-a-b")
+    end
+
+    @tag :flakey
+    test "segmentation for basic 50/50 test is in expected tolerances" do
+      {test, control} =
+        Enum.reduce(1..10_000, {0, 0}, fn i, {t, c} ->
+          id = :crypto.strong_rand_bytes(10) |> Base.encode64()
+
+          case StatsigEx.get_experiment(%{"userID" => id}, "basic-a-b") do
+            %{"test" => "control"} -> {t, c + 1}
+            _ -> {t + 1, c}
+          end
+        end)
+
+      assert test / control > 0.95 && test / control < 1.05
+    end
+  end
 end

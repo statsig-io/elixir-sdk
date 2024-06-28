@@ -32,8 +32,11 @@ defmodule StatsigEx do
 
   def get_config(user, config) do
     {_result, value, _rule, _exposures} = StatsigEx.Evaluator.find_and_eval(user, config, :config)
+
     value
   end
+
+  def get_experiment(user, exp), do: get_config(user, exp)
 
   def state, do: GenServer.call(__MODULE__, :state)
 
