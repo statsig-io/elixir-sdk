@@ -108,41 +108,6 @@ defmodule StatsigExTest do
     end
   end
 
-  describe "dynamic configs" do
-    test "basic props pass" do
-      assert %{value: %{"hello" => "world"}} =
-               StatsigEx.get_config(%{"userID" => "pass"}, "basic-props")
-    end
-
-    test "basic props fail" do
-      assert %{value: %{"hello" => "nobody"}} = StatsigEx.get_config(%{}, "basic-props")
-    end
-  end
-
-  describe "experiments" do
-    test "basic 50/50 test returns expected value" do
-      assert %{value: %{"test" => "test"}} = StatsigEx.get_experiment(%{}, "basic-a-b")
-      # just so happens that this particular userID hashes to a value that is in the control
-      assert %{value: %{"test" => "control"}} =
-               StatsigEx.get_config(%{"userID" => "control"}, "basic-a-b")
-    end
-
-    @tag :flakey
-    test "segmentation for basic 50/50 test is in expected tolerances" do
-      {test, control} =
-        Enum.reduce(1..10_000, {0, 0}, fn _, {t, c} ->
-          id = :crypto.strong_rand_bytes(10) |> Base.encode64()
-
-          case StatsigEx.get_experiment(%{"userID" => id}, "basic-a-b") do
-            %{"test" => "control"} -> {t, c + 1}
-            _ -> {t + 1, c}
-          end
-        end)
-
-      assert test / control > 0.95 && test / control < 1.05
-    end
-  end
-
   describe "vs. the erlang client" do
     test "non-existent gate" do
       {user, gate} = {%{"userID" => "whatever"}, "doesnt-exist-anywhere"}
@@ -157,21 +122,38 @@ defmodule StatsigExTest do
     test "segmentation of experiment is exactly the same" do
       gate = "basic-a-b"
 
-      {misses, results} =
-        Enum.reduce(1..10_000, {0, []}, fn _, {miss, results} ->
-          id = :crypto.strong_rand_bytes(10) |> Base.encode64()
-          user = %{"userID" => id}
-          ex = StatsigEx.get_experiment(user, gate)
-          erl = :statsig.get_experiment(user, gate)
-
-          case {Map.values(ex), Map.values(erl)} do
-            {a, b} when a == b -> {miss, [{ex, erl} | results]}
-            {a, b} -> {miss + 1, [{ex, erl} | results]}
-          end
-        end)
-
-      assert misses == 0,
-             "expected no mismatches, but got #{misses} : #{inspect(hd(results))}"
+      pressure_test_and_compare(:get_experiment, [gate])
     end
+  end
+
+  describe "dynamic configs" do
+    # probaly just need to iterate over a bunch of different variations of user on all these things
+    test "basic props pass" do
+      assert StatsigEx.get_config(%{"userID" => "pass"}, "basic-props") ==
+               :statsig.get_config(%{"userID" => "pass"}, "basic-props")
+    end
+
+    test "basic props that fail fallback properly" do
+      pressure_test_and_compare(:get_config, ["basic-props"])
+    end
+  end
+
+  defp pressure_test_and_compare(func, args, iterations \\ 10_000) do
+    {misses, results} =
+      Enum.reduce(1..iterations, {0, []}, fn _, {m, r} ->
+        id = :crypto.strong_rand_bytes(10) |> Base.encode64()
+        # we should put a bunch more data in here to be sure
+        user = %{"userID" => id}
+        # function name & arity must be the same in both (this is a good restriction)
+        ex_result = apply(StatsigEx, func, [user | args])
+        erl_result = apply(:statsig, func, [user | args])
+
+        case {ex_result, erl_result} do
+          {a, b} when a == b -> {m, r}
+          {a, b} -> {m + 1, [{a, b} | r]}
+        end
+      end)
+
+    assert misses == 0, "expected 0 misses, but got #{misses} : #{inspect(List.first(results))}"
   end
 end

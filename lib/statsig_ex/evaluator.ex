@@ -55,7 +55,10 @@ defmodule StatsigEx.Evaluator do
       {result || running_result, running_value || value, r, exposures ++ acc}
     end)
     |> case do
-      {false, _val, rule, exposures} -> {false, default, rule, exposures}
+      # in this case, we apparently want to list the rule_id as "default"
+      # (at least, that's what the erlang client does :shrug:)
+      # I'm not sure this is _actually_ what we want, though
+      {false, _val, _rule, exposures} -> {false, default, %{"id" => "default"}, exposures}
       pass -> pass
     end
   end
