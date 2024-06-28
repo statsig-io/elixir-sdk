@@ -280,7 +280,7 @@ defmodule StatsigEx.Evaluator do
     hash
   end
 
-  defp get_user_id(user, "userID" = prop), do: try_get_with_lower(user, prop) |> to_string()
+  defp get_user_id(user, "userID"), do: try_get_with_lower(user, "userID") |> to_string()
 
   defp get_user_id(user, prop),
     do: try_get_with_lower(Map.get(user, "customIDs", %{}), prop) |> to_string()
