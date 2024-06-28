@@ -107,4 +107,14 @@ defmodule StatsigExTest do
       assert StatsigEx.check_flag(%{"appVersion" => "0.6.9"}, "version-less-than")
     end
   end
+
+  describe "dynamic configs" do
+    test "basic props pass" do
+      assert %{"hello" => "world"} == StatsigEx.get_config(%{"userID" => "pass"}, "basic-props")
+    end
+
+    test "basic props fail" do
+      assert %{"hello" => "nobody"} == StatsigEx.get_config(%{}, "basic-props")
+    end
+  end
 end

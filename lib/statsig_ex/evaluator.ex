@@ -10,7 +10,7 @@ defmodule StatsigEx.Evaluator do
   # {:ok, result, value, exposures}
 
   def find_and_eval(user, name, type) do
-    case :ets.lookup(StatsigEx.ets_name(), {name, type}) do
+    case StatsigEx.lookup(name, type) do
       [{_key, spec}] ->
         {result, value, rule, exp} = do_eval(user, spec)
 
@@ -27,11 +27,13 @@ defmodule StatsigEx.Evaluator do
     end
   end
 
-  # hrm, should this log an exposure...?
-  defp do_eval(_user, %{"enabled" => false}), do: {false, nil, %{}, []}
+  # erlang client doesn't log an exposure for disabled flags, so neither will I
+  defp do_eval(_user, %{"enabled" => false, "defaultValue" => default}),
+    do: {false, default, %{}, []}
+
   defp do_eval(user, %{"rules" => rules} = spec), do: eval_rules(user, rules, spec, [])
 
-  defp eval_rules(_user, [], _spec, results) do
+  defp eval_rules(_user, [], %{"defaultValue" => default}, results) do
     # combine all the exposures and calculate result
     # only one rule needs to pass
     Enum.reduce(results, {false, nil, %{}, []}, fn {result, value, rule, exposures},
@@ -45,6 +47,10 @@ defmodule StatsigEx.Evaluator do
 
       {result || running_result, running_value || value, r, exposures ++ acc}
     end)
+    |> case do
+      {false, _val, rule, exposures} -> {false, default, rule, exposures}
+      pass -> pass
+    end
   end
 
   defp eval_rules(user, [rule | rest], spec, acc) do
@@ -118,8 +124,9 @@ defmodule StatsigEx.Evaluator do
         {false, _value, _rule, exp} ->
           {eval_pass_percent(user, rule, spec), Map.get(rule, "returnValue"), rule, exp}
 
+        # from which spec do we pull the default value...?
         {true, _value, _rule, exp} ->
-          {false, Map.get(rule, "returnValue"), Map.get(rule, "returnValue"), rule, exp}
+          {false, Map.get(rule, "returnValue"), rule, exp}
       end
 
     eval_conditions(user, rest, rule, spec, [result | acc])

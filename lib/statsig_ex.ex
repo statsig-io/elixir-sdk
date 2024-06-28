@@ -27,13 +27,17 @@ defmodule StatsigEx do
 
   def check_flag(user, flag) do
     {result, _value, _rule, _exposures} = StatsigEx.Evaluator.find_and_eval(user, flag, :gate)
-
     result
+  end
+
+  def get_config(user, config) do
+    {_result, value, _rule, _exposures} = StatsigEx.Evaluator.find_and_eval(user, config, :config)
+    value
   end
 
   def state, do: GenServer.call(__MODULE__, :state)
 
-  def lookup_gate(name), do: :ets.lookup(ets_name(), {name, :gate})
+  def lookup(name, type), do: :ets.lookup(ets_name(), {name, type})
 
   def ets_name, do: :statsig_ex_store
 

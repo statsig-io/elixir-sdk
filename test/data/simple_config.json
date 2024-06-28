@@ -1,5 +1,44 @@
 {
-	"dynamic_configs": [],
+	"dynamic_configs": [
+		{
+			"name": "basic-props",
+			"type": "dynamic_config",
+			"salt": "b46769cf-50f0-40d3-9554-25627076bf57",
+			"enabled": true,
+			"defaultValue": {
+				"hello": "nobody"
+			},
+			"rules": [
+				{
+					"name": "2qlWV33Zm7kiqfwIdKzS2f",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "user_field",
+							"targetValue": [
+								"pass"
+							],
+							"operator": "any",
+							"field": "userID",
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": {
+						"hello": "world"
+					},
+					"id": "2qlWV33Zm7kiqfwIdKzS2f",
+					"salt": "900ce73e-9194-41ee-9493-2cd158de8194",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "dynamic_config"
+		}
+	],
 	"feature_gates": [
 		{
 			"name": "version-less-than",
@@ -693,7 +732,7 @@
 	"layers": {},
 	"layer_configs": [],
 	"has_updates": true,
-	"time": 1719504327177,
+	"time": 1719543196915,
 	"company_id": "26adq53NuHkqUWjKEHQj9c",
 	"id_lists": {},
 	"diagnostics": {
