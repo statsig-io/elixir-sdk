@@ -19,18 +19,35 @@ defmodule StatsigEx.Evaluator do
   def find_and_eval(user, name, type) do
     case StatsigEx.lookup(name, type) do
       [{_key, spec}] ->
-        {result, value, rule, exp} = do_eval(user, spec)
+        case do_eval(user, spec) do
+          {result, value, rule, exp} ->
+            {result, value, rule,
+             [
+               %{
+                 "gate" => name,
+                 "gateValue" => to_string(result),
+                 "ruleID" => Map.get(rule, "id")
+               }
+               | exp
+             ]}
 
-        # this will record an exposure for a disabled gate :think:
-        {result, value, rule,
-         [
-           %{"gate" => name, "gateValue" => to_string(result), "ruleID" => Map.get(rule, "id")}
-           | exp
-         ]}
+          other ->
+            other
+        end
+
+      # {result, value, rule, exp} = do_eval(user, spec)
+
+      # are we only supposed to record an exposure when the user passes a rule...?
+      # this will record an exposure for a disabled gate :think:
+      # {true = result, value, rule,
+      #  [
+      #    %{"gate" => name, "gateValue" => to_string(result), "ruleID" => Map.get(rule, "id")}
+      #    | exp
+      #  ]}
 
       _other ->
         # {:ok, false, :not_found}
-        {false, nil, %{}, []}
+        {false, %{}, %{"id" => "Unrecognized"}, []}
     end
   end
 
@@ -55,9 +72,9 @@ defmodule StatsigEx.Evaluator do
       {result || running_result, running_value || value, r, exposures ++ acc}
     end)
     |> case do
-      # in this case, we apparently want to list the rule_id as "default"
+      # in this case, we apparently want to list the rule_id as "default",
+      # because we are falling back to the default
       # (at least, that's what the erlang client does :shrug:)
-      # I'm not sure this is _actually_ what we want, though
       {false, _val, _rule, exposures} -> {false, default, %{"id" => "default"}, exposures}
       pass -> pass
     end

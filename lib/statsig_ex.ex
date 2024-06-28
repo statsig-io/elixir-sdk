@@ -25,8 +25,8 @@ defmodule StatsigEx do
     {:ok, Map.put(state, :last_sync, last_sync)}
   end
 
-  def check_flag(user, flag) do
-    {result, _value, _rule, _exposures} = StatsigEx.Evaluator.find_and_eval(user, flag, :gate)
+  def check_gate(user, gate) do
+    {result, _value, _rule, _exposures} = StatsigEx.Evaluator.find_and_eval(user, gate, :gate)
     result
   end
 
@@ -41,6 +41,7 @@ defmodule StatsigEx do
   def state, do: GenServer.call(__MODULE__, :state)
 
   def lookup(name, type), do: :ets.lookup(ets_name(), {name, type})
+  def all(type), do: :ets.match(ets_name(), {{:"$1", type}, :_}) |> List.flatten()
 
   def ets_name, do: :statsig_ex_store
 
