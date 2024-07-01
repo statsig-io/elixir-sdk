@@ -14,6 +14,15 @@ defmodule StatsigEx.ExposureLoggingTest do
     compare_logs(%{"userID" => "123"}, "pass-gate", :gate)
   end
 
+  test "exposure logging on more complex, multi-rule gate" do
+    # had a typo when I created the rule name :facepalm:
+    compare_logs(%{"userID" => "lkjlk"}, "complex-gate", :gate)
+  end
+
+  test "exposure logging on non-existent gate" do
+    compare_logs(%{"userID" => "123"}, "xxxxxxxxx", :gate)
+  end
+
   defp compare_logs(user, id, type) do
     # flush both
     :statsig.flush_sync()
@@ -27,7 +36,7 @@ defmodule StatsigEx.ExposureLoggingTest do
     erl = Enum.map(erl_logs, &Map.delete(&1, "time"))
     ex = Enum.map(ex_logs, &Map.delete(&1, "time"))
 
-    assert erl == ex
+    assert ex == erl
   end
 
   defp check(user, id, :gate) do

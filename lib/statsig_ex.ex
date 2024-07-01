@@ -27,6 +27,7 @@ defmodule StatsigEx do
 
   def check_gate(user, gate) do
     {result, _value, _rule, exposures} = StatsigEx.Evaluator.find_and_eval(user, gate, :gate)
+
     log_exposures(user, exposures, :gate)
     result
   end
@@ -74,6 +75,7 @@ defmodule StatsigEx do
     {:noreply, Map.put(state, :events, remaining)}
   end
 
+  # shouldn't log anything...
   defp log_exposures(_user, [], _type), do: :ok
 
   defp log_exposures(user, [primary | secondary], _type) do

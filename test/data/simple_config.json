@@ -131,6 +131,94 @@
 	],
 	"feature_gates": [
 		{
+			"name": "complex-gate",
+			"type": "feature_gate",
+			"salt": "86815fdb-3471-4cc0-9ad8-6435fed4fe34",
+			"enabled": true,
+			"defaultValue": false,
+			"rules": [
+				{
+					"name": "7CpkmC2tiaYkZh2Xqegg6Z",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "user_field",
+							"targetValue": [
+								"phil",
+								"test"
+							],
+							"operator": "any",
+							"field": "userID",
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "7CpkmC2tiaYkZh2Xqegg6Z",
+					"salt": "fa8fbd3b-fb2f-4562-9cf0-94674cada976",
+					"isDeviceBased": false,
+					"idType": "userID"
+				},
+				{
+					"name": "7CpkmFmycLhjC68OCu7wJ3",
+					"passPercentage": 100,
+					"conditions": [
+						{
+							"type": "current_time",
+							"targetValue": 1404239280000,
+							"operator": "before",
+							"field": null,
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "7CpkmFmycLhjC68OCu7wJ3",
+					"salt": "36cb496c-b5fb-43ff-be84-24038548618a",
+					"isDeviceBased": false,
+					"idType": "userID"
+				},
+				{
+					"name": "7CpkmIGD7lAieVeFOJYNl7",
+					"passPercentage": 50,
+					"conditions": [
+						{
+							"type": "user_field",
+							"targetValue": [
+								"nope@nope.com"
+							],
+							"operator": "none",
+							"field": "email",
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						},
+						{
+							"type": "user_field",
+							"targetValue": [
+								"failure"
+							],
+							"operator": "none",
+							"field": "userID",
+							"additionalValues": {},
+							"isDeviceBased": false,
+							"idType": "userID"
+						}
+					],
+					"returnValue": true,
+					"id": "7CpkmIGD7lAieVeFOJYNl7",
+					"salt": "0f113e4d-e892-47d6-808d-2a6bf0627ce9",
+					"isDeviceBased": false,
+					"idType": "userID"
+				}
+			],
+			"isDeviceBased": false,
+			"idType": "userID",
+			"entity": "feature_gate"
+		},
+		{
 			"name": "version-less-than",
 			"type": "feature_gate",
 			"salt": "93972762-4f1c-49b8-b7df-1b156976bc41",
@@ -822,7 +910,7 @@
 	"layers": {},
 	"layer_configs": [],
 	"has_updates": true,
-	"time": 1719543503162,
+	"time": 1719858622954,
 	"company_id": "26adq53NuHkqUWjKEHQj9c",
 	"id_lists": {},
 	"diagnostics": {

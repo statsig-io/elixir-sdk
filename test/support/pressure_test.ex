@@ -17,6 +17,9 @@ defmodule StatsigEx.PressureTest do
         end
       end)
 
-    assert misses == 0, "expected 0 misses, but got #{misses} : #{inspect(List.first(results))}"
+    assert misses == 0,
+           "expected 0 misses, but got #{misses} | #{inspect(args)} | #{
+             inspect(List.first(results))
+           }"
   end
 end

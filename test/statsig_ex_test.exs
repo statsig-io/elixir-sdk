@@ -128,6 +128,15 @@ defmodule StatsigExTest do
   end
 
   describe "gates" do
+    test "multi-rule gate" do
+      # pressure_test_and_compare(:check_gate, ["complex-gate"])
+      user = %{"userID" => "abc"}
+      # , "email" => "hello@nope.com"}
+
+      assert StatsigEx.check_gate(user, "complex-gate") ==
+               :statsig.check_gate(user, "complex-gate")
+    end
+
     test "all existing flags" do
       Enum.each(StatsigEx.all(:gate), fn gate ->
         pressure_test_and_compare(:check_gate, [gate])

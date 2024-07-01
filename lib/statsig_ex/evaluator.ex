@@ -20,7 +20,10 @@ defmodule StatsigEx.Evaluator do
     case StatsigEx.lookup(name, type) do
       [{_key, spec}] ->
         case do_eval(user, spec) do
-          {result, value, rule, exp} ->
+          # {result, value, %{"id" => "Unrecognized"} = rule, exp} ->
+          #   {result, value, rule, exp}
+
+          {result, value, %{} = rule, exp} ->
             {result, value, rule,
              [
                %{
@@ -35,19 +38,11 @@ defmodule StatsigEx.Evaluator do
             other
         end
 
-      # {result, value, rule, exp} = do_eval(user, spec)
-
-      # are we only supposed to record an exposure when the user passes a rule...?
-      # this will record an exposure for a disabled gate :think:
-      # {true = result, value, rule,
-      #  [
-      #    %{"gate" => name, "gateValue" => to_string(result), "ruleID" => Map.get(rule, "id")}
-      #    | exp
-      #  ]}
-
       _other ->
-        # {:ok, false, :not_found}
-        {false, %{}, %{"id" => "Unrecognized"}, []}
+        {false, %{}, %{"id" => "Unrecognized"},
+         [
+           %{"gate" => name, "gateValue" => to_string(false), "ruleID" => "Unrecognized"}
+         ]}
     end
   end
 
@@ -211,7 +206,13 @@ defmodule StatsigEx.Evaluator do
     rem(hash, 10_000) < perc * 100
   end
 
-  # if either is nil, the comparison should fail
+  # for :none, if either is nil, return true
+  defp compare(val, target, op)
+       when op in ["none", "none_case_sensitive", "str_contains_none"] and
+              (is_nil(val) or is_nil(target)),
+       do: true
+
+  # for everything else, return false
   defp compare(val, target, _) when is_nil(val) or is_nil(target), do: false
 
   # make sure "any" is comparing a list
