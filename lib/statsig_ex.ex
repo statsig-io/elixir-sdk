@@ -26,14 +26,17 @@ defmodule StatsigEx do
   end
 
   def check_gate(user, gate) do
-    {result, _value, _rule, exposures} = StatsigEx.Evaluator.find_and_eval(user, gate, :gate)
+    {result, _raw_result, _value, _rule, exposures} =
+      StatsigEx.Evaluator.find_and_eval(user, gate, :gate)
 
     log_exposures(user, exposures, :gate)
     result
   end
 
   def get_config(user, config) do
-    {_result, value, rule, exposures} = StatsigEx.Evaluator.find_and_eval(user, config, :config)
+    {_result, _raw_result, value, rule, exposures} =
+      StatsigEx.Evaluator.find_and_eval(user, config, :config)
+
     log_exposures(user, exposures, :config)
 
     %{rule_id: Map.get(rule, "id"), value: value}

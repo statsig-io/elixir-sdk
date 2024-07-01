@@ -21,27 +21,8 @@ defmodule StatsigEx.Evaluator do
       [{_key, spec}] ->
         do_eval(user, spec)
 
-      # case do_eval(user, spec) do
-      #   # {result, value, %{"id" => "Unrecognized"} = rule, exp} ->
-      #   #   {result, value, rule, exp}
-
-      #   {result, value, %{} = rule, exp} ->
-      #     {result, value, rule,
-      #      [
-      #        %{
-      #          "gate" => name,
-      #          "gateValue" => to_string(result),
-      #          "ruleID" => Map.get(rule, "id")
-      #        }
-      #        | exp
-      #      ]}
-
-      #   other ->
-      #     other
-      # end
-
       _other ->
-        {false, %{}, %{"id" => "Unrecognized"},
+        {false, false, %{}, %{"id" => "Unrecognized"},
          [
            %{"gate" => name, "gateValue" => to_string(false), "ruleID" => "Unrecognized"}
          ]}
@@ -50,30 +31,43 @@ defmodule StatsigEx.Evaluator do
 
   # erlang client doesn't log an exposure for disabled flags, so neither will I
   defp do_eval(_user, %{"enabled" => false, "defaultValue" => default}),
-    do: {false, default, %{}, []}
+    do: {false, false, default, %{}, []}
 
   defp do_eval(user, %{"rules" => rules} = spec), do: eval_rules(user, rules, spec, [])
 
-  defp eval_rules(_user, [], %{"defaultValue" => default}, results) do
+  defp eval_rules(_user, [], %{"defaultValue" => default, "name" => name}, results) do
     # combine all the exposures and calculate result
     # only one rule needs to pass
-    Enum.reduce(results, {false, nil, %{}, []}, fn {result, _raw, value, rule, exposures},
-                                                   {running_result, running_value, running_rule,
-                                                    acc} ->
+    Enum.reduce(results, {false, true, nil, %{}, []}, fn {result, raw, value, rule, exposures},
+                                                         {running_result, running_raw,
+                                                          running_value, running_rule, acc} ->
       r =
         case Map.keys(running_rule) do
           [] -> rule
           _ -> running_rule
         end
 
-      {result || running_result, running_value || value, r, exposures ++ acc}
+      {result || running_result, running_raw && raw, running_value || value, r, exposures ++ acc}
     end)
     |> case do
       # in this case, we apparently want to list the rule_id as "default",
       # because we are falling back to the default
       # (at least, that's what the erlang client does :shrug:)
-      {false, _val, _rule, exposures} ->
-        {false, default, %{"id" => "default"}, exposures}
+      # only add an exposure if there isn't already one, I guess?
+      {false, _raw, _val, _rule, []} ->
+        # do we always log the default exposure?
+        # so...should this be true?
+        {false, true, default, %{"id" => "default"},
+         [
+           %{
+             "gate" => name,
+             "gateValue" => to_string(false),
+             "ruleID" => "default"
+           }
+         ]}
+
+      {false, _raw, _val, _rule, exp} ->
+        {false, true, default, %{"id" => "default"}, exp}
 
       pass ->
         pass
@@ -82,7 +76,8 @@ defmodule StatsigEx.Evaluator do
 
   defp eval_rules(user, [%{"id" => id} = rule | rest], %{"name" => name} = spec, acc) do
     # eval rules, and then
-    case eval_one_rule(user, rule, spec) do
+    eval_one_rule(user, rule, spec)
+    |> case do
       # once we find a passing rule, we bail
       {true, raw, _val, r, exp} ->
         # I guess we should log an exposure, right?
@@ -120,22 +115,6 @@ defmodule StatsigEx.Evaluator do
           _ -> running_rule
         end
 
-      # this is where we should set the exposure, and then eliminate it in find_and_eval, right?
-      # if raw_result do
-      #   {:halt,
-      #    {result && running_result, running_value || value, r,
-      #     [
-      #       %{
-      #         "gate" => name,
-      #         "ruleID" => id,
-      #         "gateValue" => to_string(result)
-      #       }
-      #       | exp
-      #     ] ++ acc}}
-      # else
-      #   {:cont, {result && running_result, running_value || value, r, exp ++ acc}}
-      # end
-
       {result && running_result, raw_result && running_raw_result, running_value || value, r,
        exp ++ acc}
     end)
@@ -144,7 +123,7 @@ defmodule StatsigEx.Evaluator do
   defp eval_conditions(user, conds, rule, spec, acc \\ [])
   defp eval_conditions(_user, [], _rule, _spec, acc), do: acc
   # public conditions are final, so short-circuit this and return
-  defp eval_conditions(user, [%{"type" => "public"} | _rest], rule, spec, acc),
+  defp eval_conditions(_user, [%{"type" => "public"} | _rest], rule, _spec, acc),
     do: [
       # should I be calculating pass percentage on conditions...or just the rule level?
       # {eval_pass_percent(user, rule, spec), true, Map.get(rule, "returnValue"), rule, []} | acc
@@ -163,7 +142,7 @@ defmodule StatsigEx.Evaluator do
         # I don't think I care about the rule returned below, do I? it should be in the exposure
         # OR, should the rule be the final rule that matched...?
         # also, should the return value be from this rule or the passed rule...?
-        {true, _val, _rule, exp} ->
+        {true, _raw, _val, _rule, exp} ->
           # {eval_pass_percent(user, rule, spec), true, Map.get(rule, "returnValue"), rule, exp}
           {true, true, Map.get(rule, "returnValue"), rule, exp}
 
@@ -184,12 +163,12 @@ defmodule StatsigEx.Evaluator do
     result =
       case find_and_eval(user, gate, :gate) do
         # false is a pass, since this is a FAIL gate check
-        {false, _value, _rule, exp} ->
+        {false, _raw, _value, _rule, exp} ->
           # {eval_pass_percent(user, rule, spec), true, Map.get(rule, "returnValue"), rule, exp}
           {true, true, Map.get(rule, "returnValue"), rule, exp}
 
         # from which spec do we pull the default value...?
-        {true, _value, _rule, exp} ->
+        {true, _raw, _value, _rule, exp} ->
           {false, false, Map.get(rule, "returnValue"), rule, exp}
       end
 
@@ -258,7 +237,6 @@ defmodule StatsigEx.Evaluator do
   defp compare(val, target, op)
        when op in ["none", "none_case_sensitive", "str_contains_none"] and
               (is_nil(val) or is_nil(target)) do
-    # IO.inspect({val, target}, label: :none)
     true
   end
 

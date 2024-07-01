@@ -149,6 +149,11 @@ defmodule StatsigExTest do
   end
 
   describe "dynamic configs" do
+    test "basic-props dynamic config" do
+      assert StatsigEx.get_config(%{"userID" => "123"}, "basic-props") ==
+               :statsig.get_config(%{"userID" => "123"}, "basic-props")
+    end
+
     test "all existing configs" do
       Enum.each(StatsigEx.all(:config), fn config ->
         pressure_test_and_compare(:get_config, [config])
