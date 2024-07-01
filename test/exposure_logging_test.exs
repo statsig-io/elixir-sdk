@@ -15,7 +15,6 @@ defmodule StatsigEx.ExposureLoggingTest do
   end
 
   test "exposure logging on more complex, multi-rule gate" do
-    # had a typo when I created the rule name :facepalm:
     compare_logs(%{"userID" => "lkjlk"}, "complex-gate", :gate)
   end
 
