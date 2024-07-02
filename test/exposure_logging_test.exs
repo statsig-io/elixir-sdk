@@ -22,6 +22,11 @@ defmodule StatsigEx.ExposureLoggingTest do
     compare_logs(%{"userID" => "123"}, "xxxxxxxxx", :gate)
   end
 
+  test "private attributes are properly dropped from logs" do
+    user = %{"userID" => "123", "privateAttributes" => %{"secret" => "key"}}
+    compare_logs(user, "complex-gate", :gate)
+  end
+
   defp compare_logs(user, id, type) do
     # flush both
     :statsig.flush_sync()

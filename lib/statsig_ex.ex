@@ -87,6 +87,8 @@ defmodule StatsigEx do
   defp log_exposures(_user, [], _type), do: :ok
 
   defp log_exposures(user, [primary | secondary], _type) do
+    user = Utils.sanitize_user(user)
+
     event = %{
       "eventName" => "statsig::gate_exposure",
       "metadata" => primary,

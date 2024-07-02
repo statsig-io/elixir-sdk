@@ -17,6 +17,7 @@ defmodule StatsigEx.APIClient do
         [{"STATSIG-API-KEY", api_key}, {"Content-Type", "application/json"}]
       )
 
-    Jason.decode(resp.body)
+    # if it fails, just return all logs
+    if resp.status_code < 300, do: [], else: logs
   end
 end
