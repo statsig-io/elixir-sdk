@@ -1,5 +1,6 @@
 defmodule StatsigEx do
   use GenServer
+  alias StatsigEx.Utils
 
   # we might need to allow for a name to be passed so we can test things
   def start_link(opts \\ []) do
@@ -26,6 +27,8 @@ defmodule StatsigEx do
   end
 
   def check_gate(user, gate) do
+    user = Utils.get_user_with_env(user)
+
     {result, _raw_result, _value, _rule, exposures} =
       StatsigEx.Evaluator.find_and_eval(user, gate, :gate)
 
@@ -34,6 +37,8 @@ defmodule StatsigEx do
   end
 
   def get_config(user, config) do
+    user = Utils.get_user_with_env(user)
+
     {_result, _raw_result, value, rule, exposures} =
       StatsigEx.Evaluator.find_and_eval(user, config, :config)
 
