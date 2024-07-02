@@ -29,8 +29,7 @@ defmodule StatsigEx do
   def check_gate(user, gate) do
     user = Utils.get_user_with_env(user)
 
-    {result, _raw_result, _value, _rule, exposures} =
-      StatsigEx.Evaluator.find_and_eval(user, gate, :gate)
+    {result, _raw_result, _value, _rule, exposures} = StatsigEx.Evaluator.eval(user, gate, :gate)
 
     log_exposures(user, exposures, :gate)
     result
@@ -40,7 +39,7 @@ defmodule StatsigEx do
     user = Utils.get_user_with_env(user)
 
     {_result, _raw_result, value, rule, exposures} =
-      StatsigEx.Evaluator.find_and_eval(user, config, :config)
+      StatsigEx.Evaluator.eval(user, config, :config)
 
     log_exposures(user, exposures, :config)
 

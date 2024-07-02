@@ -16,7 +16,18 @@ defmodule StatsigEx.Evaluator do
   # {Rule, GateValue, JsonValue, ruleID/reason, Exposures}
   # {:ok, result, value, exposures}
 
-  def find_and_eval(user, name, type) do
+  defmodule Result do
+    defstruct exposures: [],
+              final: false,
+              raw_result: false,
+              result: false,
+              rule: nil
+              value: %{},
+  end
+
+  def eval(user, spec) when is_map(spec), do: do_eval(user, spec)
+
+  def eval(user, name, type) do
     case StatsigEx.lookup(name, type) do
       [{_key, spec}] ->
         do_eval(user, spec)
@@ -103,7 +114,7 @@ defmodule StatsigEx.Evaluator do
   end
 
   defp eval_one_rule(user, %{"conditions" => conds, "id" => id} = rule, spec) do
-    results = eval_conditions(user, conds, rule, spec)
+    results = eval_conditions(user, conds, rule, spec) |> IO.inspect(label: id)
 
     # as soon as we match a condition, we bail
     Enum.reduce(results, {true, true, nil, %{}, []}, fn {result, raw_result, value, rule, exp},
@@ -122,11 +133,11 @@ defmodule StatsigEx.Evaluator do
 
   defp eval_conditions(user, conds, rule, spec, acc \\ [])
   defp eval_conditions(_user, [], _rule, _spec, acc), do: acc
+
   # public conditions are final, so short-circuit this and return
+  # gotta figure out how to make these final when they happen via pass/fail_gate
   defp eval_conditions(_user, [%{"type" => "public"} | _rest], rule, _spec, acc),
     do: [
-      # should I be calculating pass percentage on conditions...or just the rule level?
-      # {eval_pass_percent(user, rule, spec), true, Map.get(rule, "returnValue"), rule, []} | acc
       {true, true, Map.get(rule, "returnValue"), rule, []} | acc
     ]
 
@@ -138,12 +149,11 @@ defmodule StatsigEx.Evaluator do
          acc
        ) do
     result =
-      case find_and_eval(user, gate, :gate) do
+      case eval(user, gate, :gate) do
         # I don't think I care about the rule returned below, do I? it should be in the exposure
         # OR, should the rule be the final rule that matched...?
         # also, should the return value be from this rule or the passed rule...?
         {true, _raw, _val, _rule, exp} ->
-          # {eval_pass_percent(user, rule, spec), true, Map.get(rule, "returnValue"), rule, exp}
           {true, true, Map.get(rule, "returnValue"), rule, exp}
 
         other ->
@@ -161,10 +171,9 @@ defmodule StatsigEx.Evaluator do
          acc
        ) do
     result =
-      case find_and_eval(user, gate, :gate) do
+      case eval(user, gate, :gate) do
         # false is a pass, since this is a FAIL gate check
         {false, _raw, _value, _rule, exp} ->
-          # {eval_pass_percent(user, rule, spec), true, Map.get(rule, "returnValue"), rule, exp}
           {true, true, Map.get(rule, "returnValue"), rule, exp}
 
         # from which spec do we pull the default value...?
@@ -189,7 +198,6 @@ defmodule StatsigEx.Evaluator do
         # is there a reason we don't throw an exposure in here right now...?
         # should an exposure be logged any time we match a condition instead of only when we make it through the entire gate?
         true ->
-          # {eval_pass_percent(user, rule, spec), true, Map.get(rule, "returnValue"), rule, []}
           {true, true, Map.get(rule, "returnValue"), rule, []}
 
         r ->
@@ -210,6 +218,28 @@ defmodule StatsigEx.Evaluator do
 
   defp extract_value_to_compare(user, %{"type" => "unit_id", "idType" => id_type}) do
     get_user_id(user, id_type)
+  end
+
+  defp extract_value_to_compare(user, %{"type" => "ua_based", "field" => field}) do
+    case get_user_field(user, field) do
+      nil ->
+        ua = get_user_field(user, "userAgent") |> to_string() |> UAParser.parse()
+
+        case field do
+          os when os in ["os_name", "osname"] -> ua.os.family
+          v when v in ["os_version", "osversion"] -> to_string(ua.os.version)
+          bn when bn in ["browser_name", "browsername"] -> ua.family
+          bv when bv in ["browser_version", "browserversion"] -> to_string(ua.version)
+          _ -> nil
+        end
+        |> case do
+          "" -> nil
+          result -> result
+        end
+
+      val ->
+        val
+    end
   end
 
   defp extract_value_to_compare(user, %{
@@ -241,7 +271,7 @@ defmodule StatsigEx.Evaluator do
   end
 
   # for everything else, return false
-  defp compare(val, target, _) when is_nil(val) or is_nil(target), do: false
+  # defp compare(val, target, _) when is_nil(val) or is_nil(target), do: false
 
   # make sure "any" is comparing a list
   defp compare(val, target, "any") when not is_list(target), do: compare(val, [target], "any")
@@ -261,8 +291,9 @@ defmodule StatsigEx.Evaluator do
     Enum.any?(target, fn t -> String.ends_with?(val, t) end)
   end
 
+  # should the target be a list?
   defp compare(val, target, "str_contains_any") do
-    Enum.any?(target, fn t -> String.contains?(val, t) end)
+    Enum.any?(target, fn t -> String.contains?(to_string(val), t) end)
   end
 
   defp compare(val, target, "str_contains_none"), do: !compare(val, target, "str_contains_any")
@@ -303,15 +334,55 @@ defmodule StatsigEx.Evaluator do
         compare_versions(v, t, type)
 
       _ ->
-        IO.puts("invalid version")
-        false
+        # fallback to parsing manually
+        {vp, tp} = parse_versions_to_compare(val, target)
+        compare_version_lists(vp, tp, type)
     end
   end
 
   defp compare(_, _, op) do
-    # IO.inspect(op, label: :unsupported_compare)
+    IO.inspect(op, label: :unsupported_compare)
     false
   end
+
+  defp parse_versions_to_compare(a, b) do
+    a = simple_version_parse(a)
+    b = simple_version_parse(b)
+    pad_len = max(length(a), length(b))
+    {pad(a, pad_len - length(a)), pad(b, pad_len - length(b))}
+  end
+
+  defp simple_version_parse(v) do
+    # drop -beta / -alpha versions, for now
+    v |> String.split("-") |> hd |> String.split(".") |> Enum.map(&String.to_integer/1)
+  end
+
+  defp pad(v, 0), do: v
+
+  defp pad(v, len) do
+    pad(v ++ [0], len - 1)
+  end
+
+  defp compare_simple_versions([], []), do: :eq
+
+  defp compare_simple_versions([a | ra], [b | rb]) do
+    cond do
+      a == b -> compare_simple_versions(ra, rb)
+      a < b -> :lt
+      a > b -> :gt
+    end
+  end
+
+  defp compare_version_lists(val, target, "gt"), do: compare_simple_versions(val, target) == :gt
+  defp compare_version_lists(val, target, "lt"), do: compare_simple_versions(val, target) == :lt
+  defp compare_version_lists(val, target, "eq"), do: compare_simple_versions(val, target) == :eq
+  defp compare_version_lists(val, target, "neq"), do: compare_simple_versions(val, target) != :eq
+
+  defp compare_version_lists(val, target, "gte"),
+    do: Enum.member?([:gt, :eq], compare_simple_versions(val, target))
+
+  defp compare_version_lists(val, target, "lte"),
+    do: Enum.member?([:lt, :eq], compare_simple_versions(val, target))
 
   defp compare_versions(val, target, "gt"), do: Version.compare(val, target) == :gt
   defp compare_versions(val, target, "lt"), do: Version.compare(val, target) == :lt

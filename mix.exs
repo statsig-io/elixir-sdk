@@ -29,6 +29,7 @@ defmodule StatsigEx.MixProject do
     [
       {:httpoison, "~> 1.4"},
       {:jason, "~> 1.2"},
+      {:ua_parser, "~> 1.8"},
       {:statsig, path: "./statsig_erl", only: [:test]}
     ]
   end
