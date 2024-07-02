@@ -21,8 +21,8 @@ defmodule StatsigEx.Evaluator do
               final: false,
               raw_result: false,
               result: false,
-              rule: nil
-              value: %{},
+              rule: %{},
+              value: nil
   end
 
   def eval(user, spec) when is_map(spec), do: do_eval(user, spec)
@@ -33,52 +33,79 @@ defmodule StatsigEx.Evaluator do
         do_eval(user, spec)
 
       _other ->
-        {false, false, %{}, %{"id" => "Unrecognized"},
-         [
-           %{"gate" => name, "gateValue" => to_string(false), "ruleID" => "Unrecognized"}
-         ]}
+        %Result{
+          rule: %{"id" => "Unrecognized"},
+          exposures: [
+            %{"gate" => name, "gateValue" => to_string(false), "ruleID" => "Unrecognized"}
+          ]
+        }
+
+        # {false, false, %{}, %{"id" => "Unrecognized"},
+        #  [
+        #    %{"gate" => name, "gateValue" => to_string(false), "ruleID" => "Unrecognized"}
+        #  ]}
     end
   end
 
   # erlang client doesn't log an exposure for disabled flags, so neither will I
   defp do_eval(_user, %{"enabled" => false, "defaultValue" => default}),
-    do: {false, false, default, %{}, []}
+    # {false, false, default, %{}, []}
+    do: %Result{value: default}
 
   defp do_eval(user, %{"rules" => rules} = spec), do: eval_rules(user, rules, spec, [])
 
   defp eval_rules(_user, [], %{"defaultValue" => default, "name" => name}, results) do
     # combine all the exposures and calculate result
     # only one rule needs to pass
-    Enum.reduce(results, {false, true, nil, %{}, []}, fn {result, raw, value, rule, exposures},
-                                                         {running_result, running_raw,
-                                                          running_value, running_rule, acc} ->
-      r =
-        case Map.keys(running_rule) do
-          [] -> rule
-          _ -> running_rule
-        end
+    Enum.reduce(
+      results,
+      %Result{result: false, raw_result: true},
+      # {result, raw, value, rule, exposures},
+      fn curr, acc ->
+        # {running_result, running_raw, running_value, running_rule, acc} ->
 
-      {result || running_result, running_raw && raw, running_value || value, r, exposures ++ acc}
-    end)
+        r =
+          case Map.keys(acc.rule) do
+            [] -> curr.rule
+            _ -> acc.rule
+          end
+
+        %Result{
+          result: curr.result || acc.result,
+          raw_result: curr.raw_result && acc.raw_result,
+          value: acc.value && curr.value,
+          rule: r,
+          exposures: curr.exposures ++ acc.exposures
+        }
+
+        # {result || running_result, running_raw && raw, running_value || value, r,
+        #  exposures ++ acc}
+      end
+    )
     |> case do
       # in this case, we apparently want to list the rule_id as "default",
       # because we are falling back to the default
       # (at least, that's what the erlang client does :shrug:)
       # only add an exposure if there isn't already one, I guess?
-      {false, _raw, _val, _rule, []} ->
+      %{result: false, exposures: []} ->
         # do we always log the default exposure?
         # so...should this be true?
-        {false, true, default, %{"id" => "default"},
-         [
-           %{
-             "gate" => name,
-             "gateValue" => to_string(false),
-             "ruleID" => "default"
-           }
-         ]}
+        %Result{
+          result: false,
+          raw_result: true,
+          value: default,
+          rule: %{"id" => "default"},
+          exposures: [
+            %{
+              "gate" => name,
+              "gateValue" => to_string(false),
+              "ruleID" => "default"
+            }
+          ]
+        }
 
-      {false, _raw, _val, _rule, exp} ->
-        {false, true, default, %{"id" => "default"}, exp}
+      %{result: false} = r ->
+        %{r | raw_result: true, value: default, rule: %{"id" => "default"}}
 
       pass ->
         pass
@@ -90,22 +117,38 @@ defmodule StatsigEx.Evaluator do
     eval_one_rule(user, rule, spec)
     |> case do
       # once we find a passing rule, we bail
-      {true, raw, _val, r, exp} ->
+      # {true, raw, _val, r, exp} ->
+      %Result{result: true, exposures: exp} = result ->
         # I guess we should log an exposure, right?
         final_result = eval_pass_percent(user, rule, spec)
 
         eval_rules(user, [], spec, [
-          {final_result, raw, Map.get(rule, "returnValue"), r,
-           [
-             %{
-               "gate" => name,
-               "ruleID" => id,
-               # not sure if this should be raw or just true?
-               "gateValue" => to_string(final_result)
-             }
-             | exp
-           ]}
+          %{
+            result
+            | result: final_result,
+              value: Map.get(rule, "returnValue"),
+              exposures: [
+                %{
+                  "gate" => name,
+                  "ruleID" => id,
+                  # not sure if this should be raw or just true?
+                  "gateValue" => to_string(final_result)
+                }
+                | exp
+              ]
+          }
           | acc
+          # {final_result, raw, Map.get(rule, "returnValue"), r,
+          #  [
+          #    %{
+          #      "gate" => name,
+          #      "ruleID" => id,
+          #      # not sure if this should be raw or just true?
+          #      "gateValue" => to_string(final_result)
+          #    }
+          #    | exp
+          #  ]}
+          # | acc
         ])
 
       result ->
@@ -117,18 +160,31 @@ defmodule StatsigEx.Evaluator do
     results = eval_conditions(user, conds, rule, spec) |> IO.inspect(label: id)
 
     # as soon as we match a condition, we bail
-    Enum.reduce(results, {true, true, nil, %{}, []}, fn {result, raw_result, value, rule, exp},
-                                                        {running_result, running_raw_result,
-                                                         running_value, running_rule, acc} ->
-      r =
-        case Map.keys(running_rule) do
-          [] -> rule
-          _ -> running_rule
-        end
+    Enum.reduce(
+      results,
+      # {true, true, nil, %{}, []},
+      %Result{result: true, raw_result: true},
+      # fn {result, raw_result, value, rule, exp},
+      fn curr, acc ->
+        #  {running_result, running_raw_result, running_value, running_rule, acc} ->
+        r =
+          case Map.keys(acc.rule) do
+            [] -> curr.rule
+            _ -> acc.rule
+          end
 
-      {result && running_result, raw_result && running_raw_result, running_value || value, r,
-       exp ++ acc}
-    end)
+        %Result{
+          result: curr.result && acc.result,
+          raw_result: curr.raw_result && acc.raw_result,
+          value: acc.value || curr.value,
+          rule: r,
+          exposures: curr.exposures ++ acc.exposures
+        }
+
+        # {result && running_result, raw_result && running_raw_result, running_value || value, r,
+        #  exp ++ acc}
+      end
+    )
   end
 
   defp eval_conditions(user, conds, rule, spec, acc \\ [])
@@ -138,7 +194,9 @@ defmodule StatsigEx.Evaluator do
   # gotta figure out how to make these final when they happen via pass/fail_gate
   defp eval_conditions(_user, [%{"type" => "public"} | _rest], rule, _spec, acc),
     do: [
-      {true, true, Map.get(rule, "returnValue"), rule, []} | acc
+      %Result{result: true, raw_result: true, value: Map.get(rule, "returnValue"), rule: rule}
+      | acc
+      # {true, true, Map.get(rule, "returnValue"), rule, []} | acc
     ]
 
   defp eval_conditions(
@@ -153,8 +211,16 @@ defmodule StatsigEx.Evaluator do
         # I don't think I care about the rule returned below, do I? it should be in the exposure
         # OR, should the rule be the final rule that matched...?
         # also, should the return value be from this rule or the passed rule...?
-        {true, _raw, _val, _rule, exp} ->
-          {true, true, Map.get(rule, "returnValue"), rule, exp}
+        # {true, _raw, _val, _rule, exp} ->
+        %{result: true, exposures: exp} ->
+          # {true, true, Map.get(rule, "returnValue"), rule, exp}
+          %Result{
+            result: true,
+            raw_result: true,
+            value: Map.get(rule, "returnValue"),
+            rule: rule,
+            exposures: exp
+          }
 
         other ->
           other
@@ -173,12 +239,28 @@ defmodule StatsigEx.Evaluator do
     result =
       case eval(user, gate, :gate) do
         # false is a pass, since this is a FAIL gate check
-        {false, _raw, _value, _rule, exp} ->
-          {true, true, Map.get(rule, "returnValue"), rule, exp}
+        %{result: false} = res ->
+          %{
+            res
+            | result: true,
+              raw_result: true,
+              value: Map.get(rule, "returnValue"),
+              rule: rule
+          }
+
+        # {true, true, Map.get(rule, "returnValue"), rule, exp}
 
         # from which spec do we pull the default value...?
-        {true, _raw, _value, _rule, exp} ->
-          {false, false, Map.get(rule, "returnValue"), rule, exp}
+        # {true, _raw, _value, _rule, exp} ->
+        %{result: true} = res ->
+          # {false, false, Map.get(rule, "returnValue"), rule, exp}
+          %{
+            res
+            | result: false,
+              raw_result: false,
+              value: Map.get(rule, "returnValue"),
+              rule: rule
+          }
       end
 
     eval_conditions(user, rest, rule, spec, [result | acc])
@@ -198,10 +280,13 @@ defmodule StatsigEx.Evaluator do
         # is there a reason we don't throw an exposure in here right now...?
         # should an exposure be logged any time we match a condition instead of only when we make it through the entire gate?
         true ->
-          {true, true, Map.get(rule, "returnValue"), rule, []}
+          %Result{result: true, raw_result: true, value: Map.get(rule, "returnValue"), rule: rule}
+
+        # {true, true, Map.get(rule, "returnValue"), rule, []}
 
         r ->
-          {r, false, Map.get(rule, "returnValue"), rule, []}
+          %Result{result: r, raw_result: false, value: Map.get(rule, "returnValue"), rule: rule}
+          # {r, false, Map.get(rule, "returnValue"), rule, []}
       end
 
     eval_conditions(user, rest, rule, spec, [result | acc])

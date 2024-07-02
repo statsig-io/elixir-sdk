@@ -29,21 +29,19 @@ defmodule StatsigEx do
   def check_gate(user, gate) do
     user = Utils.get_user_with_env(user)
 
-    {result, _raw_result, _value, _rule, exposures} = StatsigEx.Evaluator.eval(user, gate, :gate)
+    result = StatsigEx.Evaluator.eval(user, gate, :gate)
 
-    log_exposures(user, exposures, :gate)
-    result
+    log_exposures(user, result.exposures, :gate)
+    result.result
   end
 
   def get_config(user, config) do
     user = Utils.get_user_with_env(user)
+    result = StatsigEx.Evaluator.eval(user, config, :config)
+    log_exposures(user, result.exposures, :config)
 
-    {_result, _raw_result, value, rule, exposures} =
-      StatsigEx.Evaluator.eval(user, config, :config)
-
-    log_exposures(user, exposures, :config)
-
-    %{rule_id: Map.get(rule, "id"), value: value}
+    # could probably hand back a Result struct
+    %{rule_id: Map.get(result.rule, "id"), value: result.value}
   end
 
   def get_experiment(user, exp), do: get_config(user, exp)

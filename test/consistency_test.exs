@@ -48,7 +48,7 @@ defmodule StatsigEx.ConsistencyTest do
 
   def test_supported_gates(user, [%{"name" => gate, "value" => expected} | rest], {c, results}) do
     if all_conditions_supported?(gate, :gate) do
-      {r, _, _, _rule, _exposures} = Evaluator.eval(user, gate, :gate)
+      %{result: r} = Evaluator.eval(user, gate, :gate)
 
       assert r == expected,
              "failed for #{gate}(#{c + 1}) | #{r} :: #{expected} | #{inspect(user)}"
