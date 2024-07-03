@@ -56,32 +56,22 @@ defmodule StatsigEx.Evaluator do
 
   defp eval_rules(_user, [], %{"defaultValue" => default, "name" => name}, results) do
     # combine all the exposures and calculate result
-    # only one rule needs to pass
-    Enum.reduce(
-      results,
-      %Result{result: false, raw_result: true},
-      # {result, raw, value, rule, exposures},
-      fn curr, acc ->
-        # {running_result, running_raw, running_value, running_rule, acc} ->
+    # only one rule needs to pass, but we should bail when we get to a "final" result
+    Enum.reduce(results, %Result{result: false, raw_result: true}, fn curr, acc ->
+      r =
+        case Map.keys(acc.rule) do
+          [] -> curr.rule
+          _ -> acc.rule
+        end
 
-        r =
-          case Map.keys(acc.rule) do
-            [] -> curr.rule
-            _ -> acc.rule
-          end
-
-        %Result{
-          result: curr.result || acc.result,
-          raw_result: curr.raw_result && acc.raw_result,
-          value: acc.value && curr.value,
-          rule: r,
-          exposures: curr.exposures ++ acc.exposures
-        }
-
-        # {result || running_result, running_raw && raw, running_value || value, r,
-        #  exposures ++ acc}
-      end
-    )
+      %Result{
+        result: curr.result || acc.result,
+        raw_result: curr.raw_result && acc.raw_result,
+        value: acc.value && curr.value,
+        rule: r,
+        exposures: curr.exposures ++ acc.exposures
+      }
+    end)
     |> case do
       # in this case, we apparently want to list the rule_id as "default",
       # because we are falling back to the default
@@ -117,7 +107,6 @@ defmodule StatsigEx.Evaluator do
     eval_one_rule(user, rule, spec)
     |> case do
       # once we find a passing rule, we bail
-      # {true, raw, _val, r, exp} ->
       %Result{result: true, exposures: exp} = result ->
         # I guess we should log an exposure, right?
         final_result = eval_pass_percent(user, rule, spec)
@@ -138,17 +127,6 @@ defmodule StatsigEx.Evaluator do
               ]
           }
           | acc
-          # {final_result, raw, Map.get(rule, "returnValue"), r,
-          #  [
-          #    %{
-          #      "gate" => name,
-          #      "ruleID" => id,
-          #      # not sure if this should be raw or just true?
-          #      "gateValue" => to_string(final_result)
-          #    }
-          #    | exp
-          #  ]}
-          # | acc
         ])
 
       result ->
@@ -156,35 +134,25 @@ defmodule StatsigEx.Evaluator do
     end
   end
 
-  defp eval_one_rule(user, %{"conditions" => conds, "id" => id} = rule, spec) do
-    results = eval_conditions(user, conds, rule, spec) |> IO.inspect(label: id)
+  defp eval_one_rule(user, %{"conditions" => conds} = rule, spec) do
+    results = eval_conditions(user, conds, rule, spec)
 
     # as soon as we match a condition, we bail
-    Enum.reduce(
-      results,
-      # {true, true, nil, %{}, []},
-      %Result{result: true, raw_result: true},
-      # fn {result, raw_result, value, rule, exp},
-      fn curr, acc ->
-        #  {running_result, running_raw_result, running_value, running_rule, acc} ->
-        r =
-          case Map.keys(acc.rule) do
-            [] -> curr.rule
-            _ -> acc.rule
-          end
+    Enum.reduce(results, %Result{result: true, raw_result: true}, fn curr, acc ->
+      r =
+        case Map.keys(acc.rule) do
+          [] -> curr.rule
+          _ -> acc.rule
+        end
 
-        %Result{
-          result: curr.result && acc.result,
-          raw_result: curr.raw_result && acc.raw_result,
-          value: acc.value || curr.value,
-          rule: r,
-          exposures: curr.exposures ++ acc.exposures
-        }
-
-        # {result && running_result, raw_result && running_raw_result, running_value || value, r,
-        #  exp ++ acc}
-      end
-    )
+      %Result{
+        result: curr.result && acc.result,
+        raw_result: curr.raw_result && acc.raw_result,
+        value: acc.value || curr.value,
+        rule: r,
+        exposures: curr.exposures ++ acc.exposures
+      }
+    end)
   end
 
   defp eval_conditions(user, conds, rule, spec, acc \\ [])
@@ -194,9 +162,14 @@ defmodule StatsigEx.Evaluator do
   # gotta figure out how to make these final when they happen via pass/fail_gate
   defp eval_conditions(_user, [%{"type" => "public"} | _rest], rule, _spec, acc),
     do: [
-      %Result{result: true, raw_result: true, value: Map.get(rule, "returnValue"), rule: rule}
+      %Result{
+        result: true,
+        raw_result: true,
+        value: Map.get(rule, "returnValue"),
+        rule: rule,
+        final: true
+      }
       | acc
-      # {true, true, Map.get(rule, "returnValue"), rule, []} | acc
     ]
 
   defp eval_conditions(
@@ -211,9 +184,7 @@ defmodule StatsigEx.Evaluator do
         # I don't think I care about the rule returned below, do I? it should be in the exposure
         # OR, should the rule be the final rule that matched...?
         # also, should the return value be from this rule or the passed rule...?
-        # {true, _raw, _val, _rule, exp} ->
         %{result: true, exposures: exp} ->
-          # {true, true, Map.get(rule, "returnValue"), rule, exp}
           %Result{
             result: true,
             raw_result: true,
@@ -226,6 +197,10 @@ defmodule StatsigEx.Evaluator do
           other
       end
 
+    # if the result is final, stop
+    # if result.final,
+    #   do: [result | acc],
+    #   else: eval_conditions(user, rest, rule, spec, [result | acc])
     eval_conditions(user, rest, rule, spec, [result | acc])
   end
 
@@ -248,12 +223,8 @@ defmodule StatsigEx.Evaluator do
               rule: rule
           }
 
-        # {true, true, Map.get(rule, "returnValue"), rule, exp}
-
         # from which spec do we pull the default value...?
-        # {true, _raw, _value, _rule, exp} ->
         %{result: true} = res ->
-          # {false, false, Map.get(rule, "returnValue"), rule, exp}
           %{
             res
             | result: false,
@@ -262,6 +233,10 @@ defmodule StatsigEx.Evaluator do
               rule: rule
           }
       end
+
+    # if result.final,
+    #   do: [result | acc],
+    #   else: eval_conditions(user, rest, rule, spec, [result | acc])
 
     eval_conditions(user, rest, rule, spec, [result | acc])
   end
@@ -282,11 +257,8 @@ defmodule StatsigEx.Evaluator do
         true ->
           %Result{result: true, raw_result: true, value: Map.get(rule, "returnValue"), rule: rule}
 
-        # {true, true, Map.get(rule, "returnValue"), rule, []}
-
         r ->
           %Result{result: r, raw_result: false, value: Map.get(rule, "returnValue"), rule: rule}
-          # {r, false, Map.get(rule, "returnValue"), rule, []}
       end
 
     eval_conditions(user, rest, rule, spec, [result | acc])
@@ -355,18 +327,25 @@ defmodule StatsigEx.Evaluator do
     true
   end
 
-  # for everything else, return false
-  # defp compare(val, target, _) when is_nil(val) or is_nil(target), do: false
-
   # make sure "any" is comparing a list
   defp compare(val, target, "any") when not is_list(target), do: compare(val, [target], "any")
 
-  defp compare(val, target, op) when op in ["any", "any_case_sensitive"],
-    do: Enum.any?(target, fn t -> val == t end)
+  defp compare(val, target, "any") do
+    s_val = to_string(val) |> String.downcase()
+    Enum.any?(target, fn t -> val == t || s_val == t end)
+  end
+
+  defp compare(val, target, "any_case_sensitive") do
+    s_val = to_string(val)
+    Enum.any?(target, fn t -> val == t || s_val == t end)
+  end
 
   # basically the opposite of "any"
-  defp compare(val, target, op) when op in ["none", "none_case_sensitive"],
+  defp compare(val, target, "none"),
     do: !compare(val, target, "any")
+
+  defp compare(val, target, "none_case_sensitive"),
+    do: !compare(val, target, "any_case_sensitive")
 
   defp compare(val, target, "str_starts_with_any") do
     Enum.any?(target, fn t -> String.starts_with?(val, t) end)
@@ -383,16 +362,23 @@ defmodule StatsigEx.Evaluator do
 
   defp compare(val, target, "str_contains_none"), do: !compare(val, target, "str_contains_any")
 
+  # what should we do with nil values here?
   defp compare(val, target, "str_matches") do
     # make sure the regex can compile
     case Regex.compile(target) do
       {:ok, r} ->
-        Regex.match?(r, val)
+        Regex.match?(r, to_string(val))
 
       _ ->
         false
     end
   end
+
+  defp compare(val, target, "eq"), do: val == target
+  defp compare(val, target, "neq"), do: val != target
+
+  # all below comparisons are ~numeric, and should return false if either value is nil
+  defp compare(val, target, _) when is_nil(val) or is_nil(target), do: false
 
   defp compare(val, target, "on") do
     {:ok, vd} = DateTime.from_unix(val, :millisecond)
@@ -404,8 +390,6 @@ defmodule StatsigEx.Evaluator do
   defp compare(val, target, "after"), do: val > target
   defp compare(val, target, "before"), do: val < target
 
-  defp compare(val, target, "eq"), do: val == target
-  defp compare(val, target, "neq"), do: val != target
   defp compare(val, target, "gt"), do: val > target
   defp compare(val, target, "lt"), do: val < target
   defp compare(val, target, "lte"), do: val <= target
@@ -431,6 +415,7 @@ defmodule StatsigEx.Evaluator do
   end
 
   defp parse_versions_to_compare(a, b) do
+    IO.inspect({a, b}, label: :versions)
     a = simple_version_parse(a)
     b = simple_version_parse(b)
     pad_len = max(length(a), length(b))
@@ -438,8 +423,13 @@ defmodule StatsigEx.Evaluator do
   end
 
   defp simple_version_parse(v) do
-    # drop -beta / -alpha versions, for now
-    v |> String.split("-") |> hd |> String.split(".") |> Enum.map(&String.to_integer/1)
+    # because there can be versions that aren't numbers...?
+    try do
+      # drop -beta / -alpha versions, for now
+      v |> String.split("-") |> hd |> String.split(".") |> Enum.map(&String.to_integer/1)
+    rescue
+      ArgumentError -> [v]
+    end
   end
 
   defp pad(v, 0), do: v
@@ -449,6 +439,10 @@ defmodule StatsigEx.Evaluator do
   end
 
   defp compare_simple_versions([], []), do: :eq
+
+  defp compare_simple_versions([a | _], [b | _])
+       when not is_integer(a) or not is_integer(b),
+       do: false
 
   defp compare_simple_versions([a | ra], [b | rb]) do
     cond do
