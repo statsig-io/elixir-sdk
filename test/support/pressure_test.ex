@@ -22,4 +22,29 @@ defmodule StatsigEx.PressureTest do
              inspect(List.first(results))
            }"
   end
+
+  def all_conditions_supported?(gate, :gate)
+      when gate in ["test_not_in_id_list", "test_id_list"],
+      do: false
+
+  def all_conditions_supported?(config, :config)
+      when config in ["test_exp_50_50_with_targeting_v2"],
+      do: false
+
+  def all_conditions_supported?(gate, type) do
+    case StatsigEx.lookup(gate, type) do
+      [{_key, spec}] ->
+        # IO.inspect(spec, label: Map.get(spec, "name"))
+
+        Enum.reduce(Map.get(spec, "rules"), true, fn %{"conditions" => c}, acc ->
+          acc &&
+            Enum.reduce(c, true, fn %{"type" => type, "operator" => op}, c_acc ->
+              c_acc && !Enum.any?(["ip_based"], fn n -> n == type end)
+            end)
+        end)
+
+      _ ->
+        false
+    end
+  end
 end

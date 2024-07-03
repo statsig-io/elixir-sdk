@@ -83,18 +83,36 @@ defmodule StatsigEx do
   # shouldn't log anything...
   defp log_exposures(_user, [], _type), do: :ok
 
-  defp log_exposures(user, [primary | secondary], _type) do
+  defp log_exposures(user, [%{"gate" => c, "ruleID" => r} | secondary], :config) do
+    primary = %{
+      "config" => c,
+      "ruleID" => r
+    }
+
+    event =
+      base_event(user, secondary, :config)
+      |> Map.put("metadata", primary)
+
+    GenServer.call(__MODULE__, {:log, event})
+  end
+
+  defp log_exposures(user, [primary | secondary], type) do
+    event =
+      base_event(user, secondary, type)
+      |> Map.put("metadata", primary)
+
+    GenServer.call(__MODULE__, {:log, event})
+  end
+
+  defp base_event(user, secondary, type) do
     user = Utils.sanitize_user(user)
 
     event = %{
-      "eventName" => "statsig::gate_exposure",
-      "metadata" => primary,
+      "eventName" => "statsig::#{type}_exposure",
       "secondaryExposures" => secondary,
       "time" => DateTime.utc_now() |> DateTime.to_unix(:millisecond),
       "user" => user
     }
-
-    GenServer.call(__MODULE__, {:log, event})
   end
 
   defp reload_configs(api_key, since) do

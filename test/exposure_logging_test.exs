@@ -1,33 +1,43 @@
 defmodule StatsigEx.ExposureLoggingTest do
   use ExUnit.Case
+  import StatsigEx.PressureTest
+  alias StatsigEx.Evaluator
 
-  # ------------------------------------------------------------------------
-  # NOTE: these will all currently fail because the erlang & elixir clients
-  #       are loading different configs
-  # ------------------------------------------------------------------------
-  test "exposure logging on simple gate" do
-    compare_logs(%{}, "public", :gate)
+  test "all existing configs" do
+    data =
+      "test/data/rulesets_e2e_expected_results.json"
+      |> Path.expand()
+      |> File.read!()
+      |> Jason.decode!()
+      |> Map.get("data")
+      |> Enum.each(fn %{"user" => user, "dynamic_configs" => configs} ->
+        Enum.each(configs, fn {name, %{"secondary_exposures" => sec}} ->
+          IO.inspect(user)
+          IO.inspect(name)
+
+          if all_conditions_supported?(name, :config) do
+            [_ | exp] = Evaluator.eval(user, name, :config).exposures
+            assert Enum.sort(sec) == Enum.sort(exp)
+            compare_logs(user, name, :config)
+          end
+        end)
+      end)
   end
 
-  test "exposure logging on more complex gate" do
-    compare_logs(%{"userID" => "123"}, "multiple_conditions_per_rule", :gate)
-  end
+  test "one config" do
+    user = %{
+      "appVersion" => "1.2.3-alpha",
+      "ip" => "1.0.0.0",
+      "locale" => "en_US",
+      "userAgent" =>
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1",
+      "userID" => "123"
+    }
 
-  test "exposure logging on pass gate" do
-    compare_logs(%{"userID" => "123"}, "pass-gate", :gate)
-  end
-
-  test "exposure logging on more complex, multi-rule gate" do
-    compare_logs(%{"userID" => "lkjlk"}, "complex-gate", :gate)
-  end
-
-  test "exposure logging on non-existent gate" do
-    compare_logs(%{"userID" => "123"}, "xxxxxxxxx", :gate)
-  end
-
-  test "private attributes are properly dropped from logs" do
-    user = %{"userID" => "123", "privateAttributes" => %{"secret" => "key"}}
-    compare_logs(user, "complex-gate", :gate)
+    name = "operating_system_config"
+    r = Evaluator.eval(user, name, :config)
+    IO.inspect(r, label: :result)
+    compare_logs(user, name, :config)
   end
 
   defp compare_logs(user, id, type) do

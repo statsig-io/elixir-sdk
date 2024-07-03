@@ -1,18 +1,8 @@
 defmodule StatsigEx.ConsistencyTest do
   use ExUnit.Case
   import StatsigEx.TestGenerator
+  import StatsigEx.PressureTest
   alias StatsigEx.Evaluator
-
-  def filter_unsupported([], acc), do: acc
-
-  def filter_unsupported([suite | rest], acc) do
-    filtered_gates =
-      Enum.filter(Map.get(suite, "feature_gates_v2"), fn gate ->
-        !all_conditions_supported?(gate, :gate)
-      end)
-
-    filter_unsupported([Map.put(suite, "feature_gates_v2", filtered_gates) | acc])
-  end
 
   "test/data/rulesets_e2e_expected_results.json"
   |> Path.expand()
@@ -20,6 +10,28 @@ defmodule StatsigEx.ConsistencyTest do
   |> Jason.decode!()
   |> Map.get("data")
   |> generate_tests()
+
+  test "one test" do
+    assert StatsigEx.Evaluator.eval(
+             %{
+               "appVersion" => "1.3",
+               "custom" => %{"bigInt" => 9_223_372_036_854_776_000},
+               "ip" => "1.0.0.0",
+               "locale" => "en_US",
+               "userAgent" =>
+                 "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1",
+               "userID" => "123"
+             },
+             "operating_system_config",
+             :config
+           ).value() == %{
+             "arr" => ["hi", "there"],
+             "bool" => true,
+             "num" => 13,
+             "obj" => %{"a" => "bc"},
+             "str" => "hello"
+           }
+  end
 
   defp run_tests(
          %{
@@ -61,24 +73,4 @@ defmodule StatsigEx.ConsistencyTest do
   end
 
   # for now, just skip these, because we don't pull ID lists yet
-  defp all_conditions_supported?(gate, :gate)
-       when gate in ["test_not_in_id_list", "test_id_list"],
-       do: false
-
-  defp all_conditions_supported?(gate, type) do
-    case StatsigEx.lookup(gate, type) do
-      [{_key, spec}] ->
-        # IO.inspect(spec, label: Map.get(spec, "name"))
-
-        Enum.reduce(Map.get(spec, "rules"), true, fn %{"conditions" => c}, acc ->
-          acc &&
-            Enum.reduce(c, true, fn %{"type" => type, "operator" => op}, c_acc ->
-              c_acc && !Enum.any?(["ip_based"], fn n -> n == type end)
-            end)
-        end)
-
-      _ ->
-        false
-    end
-  end
 end

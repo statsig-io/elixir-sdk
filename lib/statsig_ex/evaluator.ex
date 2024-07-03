@@ -18,6 +18,7 @@ defmodule StatsigEx.Evaluator do
 
   defmodule Result do
     defstruct exposures: [],
+              secondary_exposures: [],
               final: false,
               raw_result: false,
               result: false,
@@ -30,7 +31,21 @@ defmodule StatsigEx.Evaluator do
   def eval(user, name, type) do
     case StatsigEx.lookup(name, type) do
       [{_key, spec}] ->
-        do_eval(user, spec)
+        result = do_eval(user, spec)
+        # should we actually add the top-level exposure here...?
+        %Result{
+          result
+          | exposures: [
+              %{
+                "gate" => name,
+                "gateValue" => to_string(result.result),
+                "ruleID" => Map.get(result.rule, "id")
+              }
+              | Enum.reverse(result.exposures)
+            ]
+        }
+
+      # |> IO.inspect()
 
       _other ->
         %Result{
@@ -39,35 +54,28 @@ defmodule StatsigEx.Evaluator do
             %{"gate" => name, "gateValue" => to_string(false), "ruleID" => "Unrecognized"}
           ]
         }
-
-        # {false, false, %{}, %{"id" => "Unrecognized"},
-        #  [
-        #    %{"gate" => name, "gateValue" => to_string(false), "ruleID" => "Unrecognized"}
-        #  ]}
     end
   end
 
   # erlang client doesn't log an exposure for disabled flags, so neither will I
   defp do_eval(_user, %{"enabled" => false, "defaultValue" => default}),
-    # {false, false, default, %{}, []}
-    do: %Result{value: default}
+    do: %Result{value: default, rule: %{"id" => "disabled"}}
 
   defp do_eval(user, %{"rules" => rules} = spec), do: eval_rules(user, rules, spec, [])
 
-  defp eval_rules(_user, [], %{"defaultValue" => default, "name" => name}, results) do
-    # combine all the exposures and calculate result
-    # only one rule needs to pass, but we should bail when we get to a "final" result
+  defp eval_rules(_user, [], %{"defaultValue" => default}, results) do
+    # calculate the combined result. only one rule needs to pass
     Enum.reduce(results, %Result{result: false, raw_result: true}, fn curr, acc ->
       r =
-        case Map.keys(acc.rule) do
-          [] -> curr.rule
-          _ -> acc.rule
+        case curr.raw_result do
+          false -> acc.rule
+          _ -> if Enum.empty?(acc.rule), do: curr.rule, else: acc.rule
         end
 
       %Result{
         result: curr.result || acc.result,
         raw_result: curr.raw_result && acc.raw_result,
-        value: acc.value && curr.value,
+        value: acc.value || curr.value,
         rule: r,
         exposures: curr.exposures ++ acc.exposures
       }
@@ -75,35 +83,34 @@ defmodule StatsigEx.Evaluator do
     |> case do
       # in this case, we apparently want to list the rule_id as "default",
       # because we are falling back to the default
-      # (at least, that's what the erlang client does :shrug:)
-      # only add an exposure if there isn't already one, I guess?
-      %{result: false, exposures: []} ->
-        # do we always log the default exposure?
-        # so...should this be true?
+      %{result: false, rule: r, exposures: []} ->
         %Result{
           result: false,
           raw_result: true,
           value: default,
-          rule: %{"id" => "default"},
-          exposures: [
-            %{
-              "gate" => name,
-              "gateValue" => to_string(false),
-              "ruleID" => "default"
-            }
-          ]
+          rule: %{"id" => Map.get(r, "id", "default")}
+          # I don't know why this wouldn't be "default"
+          # rule: %{"id" => "default"}
         }
 
-      %{result: false} = r ->
-        %{r | raw_result: true, value: default, rule: %{"id" => "default"}}
+      # %{result: false} = r ->
+      #   %Result{
+      #     r
+      #     | value: default,
+      #       rule: %{"id" => "default"}
+      #   }
 
       pass ->
         pass
     end
   end
 
-  defp eval_rules(user, [%{"id" => id} = rule | rest], %{"name" => name} = spec, acc) do
-    # eval rules, and then
+  defp eval_rules(
+         user,
+         [%{"id" => id} = rule | rest],
+         %{"name" => name} = spec,
+         acc
+       ) do
     eval_one_rule(user, rule, spec)
     |> case do
       # once we find a passing rule, we bail
@@ -112,19 +119,20 @@ defmodule StatsigEx.Evaluator do
         final_result = eval_pass_percent(user, rule, spec)
 
         eval_rules(user, [], spec, [
-          %{
+          %Result{
             result
             | result: final_result,
               value: Map.get(rule, "returnValue"),
-              exposures: [
-                %{
-                  "gate" => name,
-                  "ruleID" => id,
-                  # not sure if this should be raw or just true?
-                  "gateValue" => to_string(final_result)
-                }
-                | exp
-              ]
+              exposures: exp
+              # [
+              # %{
+              #   "gate" => name,
+              #   "ruleID" => id,
+              #   # not sure if this should be raw or just true?
+              #   "gateValue" => to_string(final_result)
+              # }
+              # | exp
+              # ]
           }
           | acc
         ])
@@ -160,17 +168,23 @@ defmodule StatsigEx.Evaluator do
 
   # public conditions are final, so short-circuit this and return
   # gotta figure out how to make these final when they happen via pass/fail_gate
-  defp eval_conditions(_user, [%{"type" => "public"} | _rest], rule, _spec, acc),
-    do: [
-      %Result{
-        result: true,
-        raw_result: true,
-        value: Map.get(rule, "returnValue"),
-        rule: rule,
-        final: true
-      }
-      | acc
-    ]
+  defp eval_conditions(
+         _user,
+         [%{"type" => "public"} | _rest],
+         rule,
+         _spec,
+         acc
+       ),
+       do: [
+         %Result{
+           result: true,
+           raw_result: true,
+           value: Map.get(rule, "returnValue"),
+           rule: rule,
+           final: true
+         }
+         | acc
+       ]
 
   defp eval_conditions(
          user,
@@ -229,6 +243,7 @@ defmodule StatsigEx.Evaluator do
             res
             | result: false,
               raw_result: false,
+              # is this right? or should it be the default value?
               value: Map.get(rule, "returnValue"),
               rule: rule
           }
