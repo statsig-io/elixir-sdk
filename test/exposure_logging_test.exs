@@ -1,7 +1,10 @@
 defmodule StatsigEx.ExposureLoggingTest do
   use ExUnit.Case
 
-  # digging a bit deeper to ensure exposure logging is as expected
+  # ------------------------------------------------------------------------
+  # NOTE: these will all currently fail because the erlang & elixir clients
+  #       are loading different configs
+  # ------------------------------------------------------------------------
   test "exposure logging on simple gate" do
     compare_logs(%{}, "public", :gate)
   end

@@ -415,7 +415,6 @@ defmodule StatsigEx.Evaluator do
   end
 
   defp parse_versions_to_compare(a, b) do
-    IO.inspect({a, b}, label: :versions)
     a = simple_version_parse(a)
     b = simple_version_parse(b)
     pad_len = max(length(a), length(b))
@@ -423,11 +422,11 @@ defmodule StatsigEx.Evaluator do
   end
 
   defp simple_version_parse(v) do
-    # because there can be versions that aren't numbers...?
     try do
       # drop -beta / -alpha versions, for now
       v |> String.split("-") |> hd |> String.split(".") |> Enum.map(&String.to_integer/1)
     rescue
+      # because there can be versions that aren't numbers...?
       ArgumentError -> [v]
     end
   end

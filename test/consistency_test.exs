@@ -1,41 +1,25 @@
 defmodule StatsigEx.ConsistencyTest do
   use ExUnit.Case
+  import StatsigEx.TestGenerator
   alias StatsigEx.Evaluator
 
-  test "everything" do
-    # load the data
-    {:ok, data} =
-      "test/data/rulesets_e2e_expected_results.json"
-      |> Path.expand()
-      |> File.read!()
-      |> Jason.decode()
+  def filter_unsupported([], acc), do: acc
 
-    data = Map.get(data, "data")
-    IO.puts(length(data))
+  def filter_unsupported([suite | rest], acc) do
+    filtered_gates =
+      Enum.filter(Map.get(suite, "feature_gates_v2"), fn gate ->
+        !all_conditions_supported?(gate, :gate)
+      end)
 
-    Enum.reduce(data, 0, fn d, c ->
-      run_tests(d, c)
-      c + 1
-    end)
-
-    # Enum.each(data, &run_tests/1)
+    filter_unsupported([Map.put(suite, "feature_gates_v2", filtered_gates) | acc])
   end
 
-  test "one gate" do
-    # expect: false
-    refute Evaluator.eval(
-             %{
-               "appVersion" => "1.3",
-               "ip" => "1.0.0.0",
-               "locale" => "en_US",
-               "userAgent" =>
-                 "Mozilla/5.0 (Windows NT 5.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.5414.87 ADG/11.0.4060 Safari/537.36",
-               "userID" => "123"
-             },
-             "test_windows_7",
-             :gate
-           )
-  end
+  "test/data/rulesets_e2e_expected_results.json"
+  |> Path.expand()
+  |> File.read!()
+  |> Jason.decode!()
+  |> Map.get("data")
+  |> generate_tests()
 
   defp run_tests(
          %{
@@ -61,8 +45,8 @@ defmodule StatsigEx.ConsistencyTest do
         {{suite, test}, results}
       ) do
     if all_conditions_supported?(gate, :gate) do
-      IO.inspect(user)
-      IO.puts("")
+      # IO.inspect(user)
+      # IO.puts("")
       r = Evaluator.eval(user, gate, :gate)
 
       assert r.result == expected,
@@ -84,7 +68,7 @@ defmodule StatsigEx.ConsistencyTest do
   defp all_conditions_supported?(gate, type) do
     case StatsigEx.lookup(gate, type) do
       [{_key, spec}] ->
-        IO.inspect(spec, label: Map.get(spec, "name"))
+        # IO.inspect(spec, label: Map.get(spec, "name"))
 
         Enum.reduce(Map.get(spec, "rules"), true, fn %{"conditions" => c}, acc ->
           acc &&
