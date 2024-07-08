@@ -15,12 +15,16 @@ defmodule StatsigEx.TestGenerator do
                 }"
               )
             ) do
-              assert StatsigEx.Evaluator.eval(
-                       unquote(Macro.escape(user)),
-                       unquote(Macro.escape(name)),
-                       :gate
-                     ).result ==
-                       unquote(expected)
+              result =
+                StatsigEx.Evaluator.eval(
+                  unquote(Macro.escape(user)),
+                  unquote(Macro.escape(name)),
+                  :gate
+                )
+
+              [_ | cal_sec] = result.exposures
+              assert unquote(Macro.escape(expected)) == result.result
+              assert Enum.sort(unquote(Macro.escape(sec))) == Enum.sort(cal_sec)
             end
           end
         end) ++
@@ -44,10 +48,9 @@ defmodule StatsigEx.TestGenerator do
 
                 [_ | cal_sec] = result.exposures
 
-                assert result.value ==
-                         unquote(Macro.escape(expected))
+                assert unquote(Macro.escape(expected)) == result.value
 
-                # assert Enum.sort(cal_sec) == Enum.sort(unquote(Macro.escape(sec)))
+                assert Enum.sort(unquote(Macro.escape(sec))) == Enum.sort(cal_sec)
               end
             end
           end)

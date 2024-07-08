@@ -15,26 +15,28 @@ defmodule StatsigEx.ConsistencyTest do
     result =
       StatsigEx.Evaluator.eval(
         %{
-          "appVersion" => "1.3",
-          "ip" => "1.0.0.0",
-          "locale" => "en_US",
-          "statsigEnvironment" => %{"tier" => "DEVELOPMENT"},
+          "userID" => "123",
+          "appVersion" => "1.2.3-alpha",
           "userAgent" =>
             "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1",
-          "userID" => "123"
+          "ip" => "1.0.0.0",
+          "locale" => "en_US"
         },
-        "operating_system_config",
+        "test_exp_50_50_with_targeting_v2",
         :config
       )
       |> IO.inspect()
 
-    assert result.value == %{
-             "arr" => ["hi", "there"],
-             "bool" => true,
-             "num" => 13,
-             "obj" => %{"a" => "bc"},
-             "str" => "hello"
-           }
+    [_ | sec] = result.exposures
+
+    assert [
+             %{
+               "gate" => "global_holdout",
+               "gateValue" => "false",
+               "ruleID" => "3QoA4ncNdVGBaMt3N1KYjz:0.50:1"
+             },
+             %{"gate" => "test_is_us", "gateValue" => "false", "ruleID" => "default"}
+           ] == Enum.sort(sec)
   end
 
   defp run_tests(

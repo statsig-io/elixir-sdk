@@ -33,22 +33,29 @@ defmodule StatsigEx.Evaluator do
       [{_key, spec}] ->
         result = do_eval(user, spec)
 
-        %Result{
-          result
-          | exposures:
-              Enum.uniq([
+        # if it's a segment, we don't add exposure, I guess?
+        exposures =
+          case name do
+            <<"segment:", _::binary>> ->
+              Enum.reverse(result.exposures)
+
+            _ ->
+              [
                 %{
                   "gate" => name,
                   "gateValue" => to_string(result.result),
                   "ruleID" => Map.get(result.rule, "id")
                 }
                 | Enum.reverse(result.exposures)
-              ])
-        }
+              ]
+          end
+
+        %Result{result | exposures: Enum.uniq(exposures), final: true}
 
       _other ->
         %Result{
           rule: %{"id" => "Unrecognized"},
+          final: true,
           exposures: [
             %{"gate" => name, "gateValue" => "false", "ruleID" => "Unrecognized", value: %{}}
           ]
@@ -63,12 +70,27 @@ defmodule StatsigEx.Evaluator do
 
   defp eval_rules(_user, [], %{"defaultValue" => default}, results) do
     # calculate the combined result. only one rule needs to pass
+    # IO.inspect(results, label: :results)
+
     Enum.reduce(results, %Result{result: false, raw_result: true}, fn curr, acc ->
+      # do we need to do something different if the rule that passed was a gate?
+
+      # if it's final, overwrite any existing rule...? (this might be backward)
       r =
-        case curr.raw_result do
-          false -> acc.rule
-          _ -> if Enum.empty?(acc.rule), do: curr.rule, else: acc.rule
+        if curr.final do
+          IO.puts("FINALLY")
+          curr.rule
+        else
+          case curr.raw_result do
+            false -> acc.rule
+            _ -> if Enum.empty?(acc.rule), do: curr.rule, else: acc.rule
+          end
         end
+
+      #   case curr.raw_result do
+      #     false -> acc.rule
+      #     _ -> if Enum.empty?(acc.rule), do: curr.rule, else: acc.rule
+      #   end
 
       %Result{
         result: curr.result || acc.result,
@@ -80,23 +102,15 @@ defmodule StatsigEx.Evaluator do
     end)
     |> case do
       # in this case, we apparently want to list the rule_id as "default",
-      # because we are falling back to the default
-      # why were we only doing this if the exposures are empty, though...?
-      # %{result: false, rule: r, exposures: []} ->
       %{result: false, rule: r} = result ->
         rule = if Enum.empty?(r), do: %{"id" => "default"}, else: r
 
         %Result{
           result
           | result: false,
-            # is this right...?
-            # raw_result: true,
             value: default,
             rule: rule
         }
-
-      # %{result: false, rule: r} = result ->
-      #   %Result{result | rule: %{"id" => Map.get(r, "id", "default")}}
 
       pass ->
         pass
@@ -168,8 +182,7 @@ defmodule StatsigEx.Evaluator do
            result: true,
            raw_result: true,
            value: Map.get(rule, "returnValue"),
-           rule: rule,
-           final: true
+           rule: rule
          }
          | acc
        ]
@@ -186,23 +199,20 @@ defmodule StatsigEx.Evaluator do
         # I don't think I care about the rule returned below, do I? it should be in the exposure
         # OR, should the rule be the final rule that matched...?
         # also, should the return value be from this rule or the passed rule...?
-        %{result: true, exposures: exp} ->
+        %{result: true} = result ->
           %Result{
-            result: true,
-            raw_result: true,
-            value: Map.get(rule, "returnValue"),
-            rule: rule,
-            exposures: exp
+            result
+            | # result: true,
+              # raw_result: true,
+              value: Map.get(rule, "returnValue"),
+              rule: rule
+              # exposures: exp
           }
 
         other ->
           other
       end
 
-    # if the result is final, stop
-    # if result.final,
-    #   do: [result | acc],
-    #   else: eval_conditions(user, rest, rule, spec, [result | acc])
     eval_conditions(user, rest, rule, spec, [result | acc])
   end
 
@@ -236,10 +246,6 @@ defmodule StatsigEx.Evaluator do
               rule: rule
           }
       end
-
-    # if result.final,
-    #   do: [result | acc],
-    #   else: eval_conditions(user, rest, rule, spec, [result | acc])
 
     eval_conditions(user, rest, rule, spec, [result | acc])
   end
