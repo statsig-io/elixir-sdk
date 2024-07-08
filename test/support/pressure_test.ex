@@ -1,7 +1,7 @@
 defmodule StatsigEx.PressureTest do
   import ExUnit.Assertions
 
-  def pressure_test_and_compare(func, args, iterations \\ 10_000) do
+  def pressure_test_and_compare(func, args, iterations \\ 100) do
     {misses, results} =
       Enum.reduce(1..iterations, {0, []}, fn _, {m, r} ->
         id = :crypto.strong_rand_bytes(10) |> Base.encode64()

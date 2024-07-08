@@ -3,6 +3,7 @@ defmodule StatsigExTest do
   import StatsigEx.PressureTest
   doctest StatsigEx
 
+  # these tests should mostly be eliminated once the consistency tests are all passing
   test "non-existent flag returns false" do
     refute StatsigEx.check_gate(%{"userID" => "whatever"}, "doesnt-exist-anywhere")
   end

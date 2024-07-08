@@ -32,32 +32,30 @@ defmodule StatsigEx.Evaluator do
     case StatsigEx.lookup(name, type) do
       [{_key, spec}] ->
         result = do_eval(user, spec)
-        # should we actually add the top-level exposure here...?
+
         %Result{
           result
-          | exposures: [
-              %{
-                "gate" => name,
-                "gateValue" => to_string(result.result),
-                "ruleID" => Map.get(result.rule, "id")
-              }
-              | Enum.reverse(result.exposures)
-            ]
+          | exposures:
+              Enum.uniq([
+                %{
+                  "gate" => name,
+                  "gateValue" => to_string(result.result),
+                  "ruleID" => Map.get(result.rule, "id")
+                }
+                | Enum.reverse(result.exposures)
+              ])
         }
-
-      # |> IO.inspect()
 
       _other ->
         %Result{
           rule: %{"id" => "Unrecognized"},
           exposures: [
-            %{"gate" => name, "gateValue" => to_string(false), "ruleID" => "Unrecognized"}
+            %{"gate" => name, "gateValue" => "false", "ruleID" => "Unrecognized", value: %{}}
           ]
         }
     end
   end
 
-  # erlang client doesn't log an exposure for disabled flags, so neither will I
   defp do_eval(_user, %{"enabled" => false, "defaultValue" => default}),
     do: %Result{value: default, rule: %{"id" => "disabled"}}
 
@@ -83,22 +81,22 @@ defmodule StatsigEx.Evaluator do
     |> case do
       # in this case, we apparently want to list the rule_id as "default",
       # because we are falling back to the default
-      %{result: false, rule: r, exposures: []} ->
+      # why were we only doing this if the exposures are empty, though...?
+      # %{result: false, rule: r, exposures: []} ->
+      %{result: false, rule: r} = result ->
+        rule = if Enum.empty?(r), do: %{"id" => "default"}, else: r
+
         %Result{
-          result: false,
-          raw_result: true,
-          value: default,
-          rule: %{"id" => Map.get(r, "id", "default")}
-          # I don't know why this wouldn't be "default"
-          # rule: %{"id" => "default"}
+          result
+          | result: false,
+            # is this right...?
+            # raw_result: true,
+            value: default,
+            rule: rule
         }
 
-      # %{result: false} = r ->
-      #   %Result{
-      #     r
-      #     | value: default,
-      #       rule: %{"id" => "default"}
-      #   }
+      # %{result: false, rule: r} = result ->
+      #   %Result{result | rule: %{"id" => Map.get(r, "id", "default")}}
 
       pass ->
         pass
@@ -115,7 +113,6 @@ defmodule StatsigEx.Evaluator do
     |> case do
       # once we find a passing rule, we bail
       %Result{result: true, exposures: exp} = result ->
-        # I guess we should log an exposure, right?
         final_result = eval_pass_percent(user, rule, spec)
 
         eval_rules(user, [], spec, [
@@ -124,15 +121,6 @@ defmodule StatsigEx.Evaluator do
             | result: final_result,
               value: Map.get(rule, "returnValue"),
               exposures: exp
-              # [
-              # %{
-              #   "gate" => name,
-              #   "ruleID" => id,
-              #   # not sure if this should be raw or just true?
-              #   "gateValue" => to_string(final_result)
-              # }
-              # | exp
-              # ]
           }
           | acc
         ])
@@ -314,6 +302,12 @@ defmodule StatsigEx.Evaluator do
     end
   end
 
+  # for now, just assume all IPs are US
+  defp extract_value_to_compare(%{"ip" => _ip}, %{"type" => "ip_based", "field" => "country"}),
+    do: "US"
+
+  defp extract_value_to_compare(_user, %{"type" => "ip_based"}), do: nil
+
   defp extract_value_to_compare(user, %{
          "type" => "user_bucket",
          "additionalValues" => %{"salt" => salt},
@@ -425,7 +419,7 @@ defmodule StatsigEx.Evaluator do
   end
 
   defp compare(_, _, op) do
-    IO.inspect(op, label: :unsupported_compare)
+    # IO.inspect(op, label: :unsupported_compare)
     false
   end
 

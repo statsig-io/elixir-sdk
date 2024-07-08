@@ -12,19 +12,23 @@ defmodule StatsigEx.ConsistencyTest do
   |> generate_tests()
 
   test "one test" do
-    assert StatsigEx.Evaluator.eval(
-             %{
-               "appVersion" => "1.3",
-               "custom" => %{"bigInt" => 9_223_372_036_854_776_000},
-               "ip" => "1.0.0.0",
-               "locale" => "en_US",
-               "userAgent" =>
-                 "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1",
-               "userID" => "123"
-             },
-             "operating_system_config",
-             :config
-           ).value() == %{
+    result =
+      StatsigEx.Evaluator.eval(
+        %{
+          "appVersion" => "1.3",
+          "ip" => "1.0.0.0",
+          "locale" => "en_US",
+          "statsigEnvironment" => %{"tier" => "DEVELOPMENT"},
+          "userAgent" =>
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1",
+          "userID" => "123"
+        },
+        "operating_system_config",
+        :config
+      )
+      |> IO.inspect()
+
+    assert result.value == %{
              "arr" => ["hi", "there"],
              "bool" => true,
              "num" => 13,

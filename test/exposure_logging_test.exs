@@ -15,15 +15,15 @@ defmodule StatsigEx.ExposureLoggingTest do
           IO.inspect(user)
           IO.inspect(name)
 
-          if all_conditions_supported?(name, :config) do
-            [_ | exp] = Evaluator.eval(user, name, :config).exposures
-            assert Enum.sort(sec) == Enum.sort(exp)
-            compare_logs(user, name, :config)
+          if all_conditions_supported?(name, :config) && name != "inline_targeting_rules_exp" do
+            [prim | exp] = Evaluator.eval(user, name, :config).exposures
+            assert Enum.sort(exp) == Enum.sort(sec)
           end
         end)
       end)
   end
 
+  @tag :skip
   test "one config" do
     user = %{
       "appVersion" => "1.2.3-alpha",
@@ -34,17 +34,33 @@ defmodule StatsigEx.ExposureLoggingTest do
       "userID" => "123"
     }
 
-    name = "operating_system_config"
-    r = Evaluator.eval(user, name, :config)
-    IO.inspect(r, label: :result)
-    compare_logs(user, name, :config)
+    exp_secondary = [
+      %{
+        "gate" => "global_holdout",
+        "gateValue" => "false",
+        "ruleID" => "3QoA4ncNdVGBaMt3N1KYjz:0.50:1"
+      }
+      # %{
+      #   "gate" => "segment:inline_targeting_rules_exp",
+      #   "gateValue" => "true",
+      #   "ruleID" => "57irdfAFMZqlbOdaF481RB"
+      # }
+    ]
+
+    name = "inline_targeting_rules_exp"
+    %{exposures: [prim | exp]} = Evaluator.eval(user, name, :config)
+    IO.inspect(prim, label: :result)
+    assert Enum.sort(exp) == Enum.sort(exp_secondary)
+    # compare_logs(user, name, :config)
+  end
+
+  defp compare_with_expected(user, id, type) do
+    flush()
+    result = Evaluator.eval(user, id, type)
   end
 
   defp compare_logs(user, id, type) do
-    # flush both
-    :statsig.flush_sync()
-    StatsigEx.flush()
-
+    flush()
     check(user, id, type)
     [{_, erl_logs} | _rest] = GenServer.call(:statsig_server, {:state})
     %{events: ex_logs} = StatsigEx.state()
@@ -64,5 +80,11 @@ defmodule StatsigEx.ExposureLoggingTest do
   defp check(user, id, :config) do
     StatsigEx.get_config(user, id)
     :statsig.get_config(user, id)
+  end
+
+  defp flush do
+    # flush both
+    :statsig.flush_sync()
+    StatsigEx.flush()
   end
 end

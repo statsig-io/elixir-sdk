@@ -6,7 +6,7 @@ defmodule StatsigEx.TestGenerator do
                                            "feature_gates_v2" => gates,
                                            "dynamic_configs" => d_configs
                                          } ->
-        Enum.map(gates, fn {name, %{"value" => expected}} ->
+        Enum.map(gates, fn {name, %{"value" => expected, "secondary_exposures" => sec}} ->
           quote do
             test(
               unquote(
@@ -24,7 +24,7 @@ defmodule StatsigEx.TestGenerator do
             end
           end
         end) ++
-          Enum.map(d_configs, fn {name, %{"value" => expected}} ->
+          Enum.map(d_configs, fn {name, %{"value" => expected, "secondary_exposures" => sec}} ->
             quote do
               # ideally I'd skip some of these dynamically based on what checks we support
               # @tag skip: ...
@@ -35,12 +35,19 @@ defmodule StatsigEx.TestGenerator do
                   }"
                 )
               ) do
-                assert StatsigEx.Evaluator.eval(
-                         unquote(Macro.escape(user)),
-                         unquote(Macro.escape(name)),
-                         :config
-                       ).value ==
+                result =
+                  StatsigEx.Evaluator.eval(
+                    unquote(Macro.escape(user)),
+                    unquote(Macro.escape(name)),
+                    :config
+                  )
+
+                [_ | cal_sec] = result.exposures
+
+                assert result.value ==
                          unquote(Macro.escape(expected))
+
+                # assert Enum.sort(cal_sec) == Enum.sort(unquote(Macro.escape(sec)))
               end
             end
           end)
