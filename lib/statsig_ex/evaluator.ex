@@ -16,6 +16,8 @@ defmodule StatsigEx.Evaluator do
   # {Rule, GateValue, JsonValue, ruleID/reason, Exposures}
   # {:ok, result, value, exposures}
 
+  @unsupported ["ip_based"]
+
   defmodule Result do
     defstruct exposures: [],
               secondary_exposures: [],
@@ -23,9 +25,11 @@ defmodule StatsigEx.Evaluator do
               raw_result: false,
               result: false,
               rule: %{},
-              value: nil
+              value: nil,
+              type: :rule
   end
 
+  # this doesn't add the top-level exposure properly
   def eval(user, spec) when is_map(spec), do: do_eval(user, spec)
 
   def eval(user, name, type) do
@@ -50,12 +54,12 @@ defmodule StatsigEx.Evaluator do
               ]
           end
 
-        %Result{result | exposures: Enum.uniq(exposures), final: true}
+        %Result{result | exposures: Enum.uniq(exposures), final: true, type: type}
 
       _other ->
         %Result{
           rule: %{"id" => "Unrecognized"},
-          final: true,
+          type: type,
           exposures: [
             %{"gate" => name, "gateValue" => "false", "ruleID" => "Unrecognized", value: %{}}
           ]
@@ -68,39 +72,35 @@ defmodule StatsigEx.Evaluator do
 
   defp do_eval(user, %{"rules" => rules} = spec), do: eval_rules(user, rules, spec, [])
 
+  # I think this is the real issue: we are trying to cleverly combine results
+  # when we don't actually need to. We should only need to accumulate exposures, I think?
+  # because eval_rules should return a result as soon as it finds a passing rule, at which point
+  # there's nothing left to figure out, just return the result with the accumulated exposures
   defp eval_rules(_user, [], %{"defaultValue" => default}, results) do
+    # I think the result should just be the first one, right?
     # calculate the combined result. only one rule needs to pass
     # IO.inspect(results, label: :results)
 
     Enum.reduce(results, %Result{result: false, raw_result: true}, fn curr, acc ->
       # do we need to do something different if the rule that passed was a gate?
-
-      # if it's final, overwrite any existing rule...? (this might be backward)
       r =
-        if curr.final do
-          IO.puts("FINALLY")
-          curr.rule
-        else
-          case curr.raw_result do
-            false -> acc.rule
-            _ -> if Enum.empty?(acc.rule), do: curr.rule, else: acc.rule
-          end
+        case curr.raw_result do
+          false -> acc.rule
+          _ -> if Enum.empty?(acc.rule), do: curr.rule, else: acc.rule
         end
 
-      #   case curr.raw_result do
-      #     false -> acc.rule
-      #     _ -> if Enum.empty?(acc.rule), do: curr.rule, else: acc.rule
-      #   end
-
       %Result{
-        result: curr.result || acc.result,
-        raw_result: curr.raw_result && acc.raw_result,
-        value: acc.value || curr.value,
-        rule: r,
-        exposures: curr.exposures ++ acc.exposures
+        acc
+        | result: curr.result || acc.result,
+          raw_result: curr.raw_result && acc.raw_result,
+          value: acc.value || curr.value,
+          rule: r,
+          exposures: curr.exposures ++ acc.exposures,
+          final: curr.final
       }
     end)
     |> case do
+      # why wouldn't we always list the rule as default here?
       # in this case, we apparently want to list the rule_id as "default",
       %{result: false, rule: r} = result ->
         rule = if Enum.empty?(r), do: %{"id" => "default"}, else: r
@@ -119,8 +119,8 @@ defmodule StatsigEx.Evaluator do
 
   defp eval_rules(
          user,
-         [%{"id" => id} = rule | rest],
-         %{"name" => name} = spec,
+         [rule | rest],
+         spec,
          acc
        ) do
     eval_one_rule(user, rule, spec)
@@ -129,6 +129,7 @@ defmodule StatsigEx.Evaluator do
       %Result{result: true, exposures: exp} = result ->
         final_result = eval_pass_percent(user, rule, spec)
 
+        # why do we need to combine all the rule results...? just for exposures, right?
         eval_rules(user, [], spec, [
           %Result{
             result
@@ -147,22 +148,28 @@ defmodule StatsigEx.Evaluator do
   defp eval_one_rule(user, %{"conditions" => conds} = rule, spec) do
     results = eval_conditions(user, conds, rule, spec)
 
-    # as soon as we match a condition, we bail
+    # all conditions must match, and we should only include the rule if all match
     Enum.reduce(results, %Result{result: true, raw_result: true}, fn curr, acc ->
-      r =
-        case Map.keys(acc.rule) do
-          [] -> curr.rule
-          _ -> acc.rule
-        end
+      # r =
+      #   case Map.keys(acc.rule) do
+      #     [] -> curr.rule
+      #     _ -> acc.rule
+      #   end
 
       %Result{
         result: curr.result && acc.result,
         raw_result: curr.raw_result && acc.raw_result,
         value: acc.value || curr.value,
-        rule: r,
-        exposures: curr.exposures ++ acc.exposures
+        # rule: r,
+        exposures: curr.exposures ++ acc.exposures,
+        # this is hacky
+        final: curr.final
       }
     end)
+    |> case do
+      %{raw_result: true} = result -> %Result{result | rule: rule}
+      result -> result
+    end
   end
 
   defp eval_conditions(user, conds, rule, spec, acc \\ [])
@@ -202,16 +209,16 @@ defmodule StatsigEx.Evaluator do
         %{result: true} = result ->
           %Result{
             result
-            | # result: true,
-              # raw_result: true,
-              value: Map.get(rule, "returnValue"),
+            | value: Map.get(rule, "returnValue"),
+              # should it overwrite the rule returned by the gate...?
               rule: rule
-              # exposures: exp
           }
 
         other ->
           other
       end
+
+    # |> IO.inspect(label: :pass_gate)
 
     eval_conditions(user, rest, rule, spec, [result | acc])
   end
@@ -220,6 +227,7 @@ defmodule StatsigEx.Evaluator do
          user,
          [%{"type" => "fail_gate", "targetValue" => gate} | rest],
          rule,
+         #  %{"defaultValue" => default} = spec,
          spec,
          acc
        ) do
@@ -230,7 +238,7 @@ defmodule StatsigEx.Evaluator do
           %{
             res
             | result: true,
-              raw_result: true,
+              raw_result: !res.raw_result,
               value: Map.get(rule, "returnValue"),
               rule: rule
           }
@@ -240,14 +248,27 @@ defmodule StatsigEx.Evaluator do
           %{
             res
             | result: false,
-              raw_result: false,
+              raw_result: !res.raw_result,
               # is this right? or should it be the default value?
               value: Map.get(rule, "returnValue"),
-              rule: rule
+              # value: default,
+              # if it failed, we shouldn't return a rule at all
+              rule: %{}
+              # rule: rule
           }
       end
 
+    # |> IO.inspect(label: :fail)
+
     eval_conditions(user, rest, rule, spec, [result | acc])
+  end
+
+  # ip_based compares are unsupported for now
+  defp eval_conditions(user, [%{"type" => type} | rest], rule, spec, acc)
+       when type in @unsupported do
+    IO.puts("unsupported type: #{type}")
+    # not sure why raw_result is true here, but that's what the erlang client does...?
+    eval_conditions(user, rest, rule, spec, [%Result{result: false, raw_result: true} | acc])
   end
 
   defp eval_conditions(
@@ -307,12 +328,6 @@ defmodule StatsigEx.Evaluator do
         val
     end
   end
-
-  # for now, just assume all IPs are US
-  defp extract_value_to_compare(%{"ip" => _ip}, %{"type" => "ip_based", "field" => "country"}),
-    do: "US"
-
-  defp extract_value_to_compare(_user, %{"type" => "ip_based"}), do: nil
 
   defp extract_value_to_compare(user, %{
          "type" => "user_bucket",

@@ -22,12 +22,13 @@ defmodule StatsigEx.ConsistencyTest do
           "ip" => "1.0.0.0",
           "locale" => "en_US"
         },
-        "test_exp_50_50_with_targeting_v2",
-        :config
+        # "test_exp_50_50_with_targeting_v2",
+        "test_is_us",
+        :gate
       )
-      |> IO.inspect()
 
     [_ | sec] = result.exposures
+    sec = result.exposures |> IO.inspect()
 
     assert [
              %{

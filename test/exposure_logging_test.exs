@@ -12,10 +12,7 @@ defmodule StatsigEx.ExposureLoggingTest do
       |> Map.get("data")
       |> Enum.each(fn %{"user" => user, "dynamic_configs" => configs} ->
         Enum.each(configs, fn {name, %{"secondary_exposures" => sec}} ->
-          IO.inspect(user)
-          IO.inspect(name)
-
-          if all_conditions_supported?(name, :config) && name != "inline_targeting_rules_exp" do
+          if all_conditions_supported?(name, :config) do
             [prim | exp] = Evaluator.eval(user, name, :config).exposures
             assert Enum.sort(exp) == Enum.sort(sec)
           end
@@ -26,32 +23,48 @@ defmodule StatsigEx.ExposureLoggingTest do
   @tag :skip
   test "one config" do
     user = %{
+      "userID" => "123",
       "appVersion" => "1.2.3-alpha",
-      "ip" => "1.0.0.0",
-      "locale" => "en_US",
       "userAgent" =>
         "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1",
-      "userID" => "123"
+      "ip" => "1.0.0.0",
+      "locale" => "en_US"
     }
 
-    exp_secondary = [
-      %{
-        "gate" => "global_holdout",
-        "gateValue" => "false",
-        "ruleID" => "3QoA4ncNdVGBaMt3N1KYjz:0.50:1"
-      }
-      # %{
-      #   "gate" => "segment:inline_targeting_rules_exp",
-      #   "gateValue" => "true",
-      #   "ruleID" => "57irdfAFMZqlbOdaF481RB"
-      # }
-    ]
+    #   # "test_exp_50_50_with_targeting_v2",
+    #   "test_is_us",
+    #   :gate
+    # )
 
-    name = "inline_targeting_rules_exp"
-    %{exposures: [prim | exp]} = Evaluator.eval(user, name, :config)
-    IO.inspect(prim, label: :result)
-    assert Enum.sort(exp) == Enum.sort(exp_secondary)
-    # compare_logs(user, name, :config)
+    # user = %{
+    #   "appVersion" => "1.2.3-alpha",
+    #   "ip" => "1.0.0.0",
+    #   "locale" => "en_US",
+    #   "userAgent" =>
+    #     "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1",
+    #   "userID" => "123"
+    # }
+
+    # exp_secondary = [
+    #   %{
+    #     "gate" => "global_holdout",
+    #     "gateValue" => "false",
+    #     "ruleID" => "3QoA4ncNdVGBaMt3N1KYjz:0.50:1"
+    #   }
+    # %{
+    #   "gate" => "segment:inline_targeting_rules_exp",
+    #   "gateValue" => "true",
+    #   "ruleID" => "57irdfAFMZqlbOdaF481RB"
+    # }
+    # ]
+
+    name = "test_is_us"
+
+    # name = "inline_targeting_rules_exp"
+    # %{exposures: [prim | exp]} = Evaluator.eval(user, name, :config)
+    # IO.inspect(prim, label: :result)
+    # assert Enum.sort(exp) == Enum.sort(exp_secondary)
+    compare_logs(user, name, :gate)
   end
 
   defp compare_with_expected(user, id, type) do

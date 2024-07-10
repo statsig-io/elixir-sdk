@@ -7,6 +7,7 @@ defmodule StatsigEx.TestGenerator do
                                            "dynamic_configs" => d_configs
                                          } ->
         Enum.map(gates, fn {name, %{"value" => expected, "secondary_exposures" => sec}} ->
+          # if(!String.contains?(name, "id_list")) do
           quote do
             test(
               unquote(
@@ -24,11 +25,22 @@ defmodule StatsigEx.TestGenerator do
 
               [_ | cal_sec] = result.exposures
               assert unquote(Macro.escape(expected)) == result.result
+              # assert unquote(Macro.escape(expected)) ==
+              #          StatsigEx.Evaluator.eval(
+              #            unquote(Macro.escape(user)),
+              #            unquote(Macro.escape(name)),
+              #            :gate
+              #          ).result
+
               assert Enum.sort(unquote(Macro.escape(sec))) == Enum.sort(cal_sec)
             end
           end
+
+          # end
         end) ++
           Enum.map(d_configs, fn {name, %{"value" => expected, "secondary_exposures" => sec}} ->
+            # don't do id_lists
+            # if(!String.contains?(name, "id_list")) do
             quote do
               # ideally I'd skip some of these dynamically based on what checks we support
               # @tag skip: ...
@@ -49,12 +61,21 @@ defmodule StatsigEx.TestGenerator do
                 [_ | cal_sec] = result.exposures
 
                 assert unquote(Macro.escape(expected)) == result.value
+                # assert unquote(Macro.escape(expected)) ==
+                #          StatsigEx.Evaluator.eval(
+                #            unquote(Macro.escape(user)),
+                #            unquote(Macro.escape(name)),
+                #            :config
+                #          ).value
 
                 assert Enum.sort(unquote(Macro.escape(sec))) == Enum.sort(cal_sec)
               end
             end
+
+            # end
           end)
       end)
+      |> Enum.filter(fn a -> a end)
       |> Enum.each(fn test_case ->
         Code.eval_quoted(test_case, [], __ENV__)
       end)
