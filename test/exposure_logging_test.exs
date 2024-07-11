@@ -21,45 +21,19 @@ defmodule StatsigEx.ExposureLoggingTest do
       end)
   end
 
-  @tag :skip
+  # @tag :skip
   test "one config" do
     user = %{
-      "userID" => "123",
-      "appVersion" => "1.2.3-alpha",
+      "appVersion" => "1.3",
+      "ip" => "1.0.0.0",
+      "locale" => "en_US",
+      "statsigEnvironment" => %{"tier" => "DEVELOPMENT"},
       "userAgent" =>
         "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1",
-      "ip" => "1.0.0.0",
-      "locale" => "en_US"
+      "userID" => "123"
     }
 
-    #   # "test_exp_50_50_with_targeting_v2",
-    #   "test_is_us",
-    #   :gate
-    # )
-
-    # user = %{
-    #   "appVersion" => "1.2.3-alpha",
-    #   "ip" => "1.0.0.0",
-    #   "locale" => "en_US",
-    #   "userAgent" =>
-    #     "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1",
-    #   "userID" => "123"
-    # }
-
-    # exp_secondary = [
-    #   %{
-    #     "gate" => "global_holdout",
-    #     "gateValue" => "false",
-    #     "ruleID" => "3QoA4ncNdVGBaMt3N1KYjz:0.50:1"
-    #   }
-    # %{
-    #   "gate" => "segment:inline_targeting_rules_exp",
-    #   "gateValue" => "true",
-    #   "ruleID" => "57irdfAFMZqlbOdaF481RB"
-    # }
-    # ]
-
-    name = "test_is_us"
+    name = "test_gate_with_targeting_gate"
 
     # name = "inline_targeting_rules_exp"
     # %{exposures: [prim | exp]} = Evaluator.eval(user, name, :config)

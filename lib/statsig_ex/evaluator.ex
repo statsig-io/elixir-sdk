@@ -72,73 +72,30 @@ defmodule StatsigEx.Evaluator do
 
   defp do_eval(user, %{"rules" => rules} = spec), do: eval_rules(user, rules, spec, [])
 
-  # I think this is the real issue: we are trying to cleverly combine results
-  # when we don't actually need to. We should only need to accumulate exposures, I think?
-  # because eval_rules should return a result as soon as it finds a passing rule, at which point
-  # there's nothing left to figure out, just return the result with the accumulated exposures
   defp eval_rules(_user, [], %{"defaultValue" => default}, results) do
-    # I think the result should just be the first one, right?
-    # calculate the combined result. only one rule needs to pass
-    # IO.inspect(results, label: :results)
-
-    Enum.reduce(results, %Result{result: false, raw_result: true}, fn curr, acc ->
-      # do we need to do something different if the rule that passed was a gate?
-      r =
-        case curr.raw_result do
-          false -> acc.rule
-          _ -> if Enum.empty?(acc.rule), do: curr.rule, else: acc.rule
-        end
-
-      %Result{
-        acc
-        | result: curr.result || acc.result,
-          raw_result: curr.raw_result && acc.raw_result,
-          value: acc.value || curr.value,
-          rule: r,
-          exposures: curr.exposures ++ acc.exposures,
-          final: curr.final
-      }
-    end)
-    |> case do
-      # why wouldn't we always list the rule as default here?
-      # in this case, we apparently want to list the rule_id as "default",
-      %{result: false, rule: r} = result ->
-        rule = if Enum.empty?(r), do: %{"id" => "default"}, else: r
-
-        %Result{
-          result
-          | result: false,
-            value: default,
-            rule: rule
-        }
-
-      pass ->
-        pass
-    end
+    # need to combine exposures, I guess, right?
+    Enum.reduce(
+      results,
+      %Result{result: false, value: default, rule: %{"id" => "default"}},
+      fn r, final ->
+        %Result{final | exposures: r.exposures ++ final.exposures}
+      end
+    )
   end
 
-  defp eval_rules(
-         user,
-         [rule | rest],
-         spec,
-         acc
-       ) do
-    eval_one_rule(user, rule, spec)
-    |> case do
-      # once we find a passing rule, we bail
-      %Result{result: true, exposures: exp} = result ->
+  # only evaluate as many rules as we need to to find a matching one, right?
+  defp eval_rules(user, [rule | rest], spec, acc) do
+    case eval_one_rule(user, rule, spec) do
+      %Result{result: true} = result ->
         final_result = eval_pass_percent(user, rule, spec)
-
-        # why do we need to combine all the rule results...? just for exposures, right?
-        eval_rules(user, [], spec, [
-          %Result{
-            result
-            | result: final_result,
-              value: Map.get(rule, "returnValue"),
-              exposures: exp
-          }
-          | acc
-        ])
+        # can we just return the result now?
+        Enum.reduce(
+          acc,
+          %Result{result | result: final_result, value: Map.get(rule, "returnValue")},
+          fn r, final ->
+            %Result{final | exposures: r.exposures ++ final.exposures}
+          end
+        )
 
       result ->
         eval_rules(user, rest, spec, [result | acc])

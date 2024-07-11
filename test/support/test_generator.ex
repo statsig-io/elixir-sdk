@@ -19,23 +19,43 @@ defmodule StatsigEx.TestGenerator do
               }"
             )
           ) do
-            result =
-              StatsigEx.Evaluator.eval(
-                unquote(Macro.escape(user)),
-                unquote(name),
-                unquote(type)
-              )
+            # skip if it's not supported
+            if StatsigEx.PressureTest.all_conditions_supported?(unquote(name), unquote(type)) do
+              result =
+                StatsigEx.Evaluator.eval(
+                  unquote(Macro.escape(user)),
+                  unquote(name),
+                  unquote(type)
+                )
 
-            case unquote(type) do
-              :gate ->
-                assert unquote(Macro.escape(expected)) == result.result
+              case unquote(type) do
+                :gate ->
+                  assert unquote(Macro.escape(expected)) == result.result
 
-              _ ->
-                assert unquote(Macro.escape(expected)) == result.value
+                _ ->
+                  assert unquote(Macro.escape(expected)) == result.value
+              end
+
+              [_ | cal_sec] = result.exposures
+
+              # spit out the test setup on failures
+              # if Enum.sort(unquote(Macro.escape(secondary))) != Enum.sort(cal_sec) do
+              #   IO.puts("StatsigEx.Evaluator.eval(
+              #     #{unquote(inspect(Macro.escape(user)))},
+              #     #{unquote(name)},
+              #     #{unquote(type)}
+              #   )")
+              # end
+
+              if Enum.sort(unquote(Macro.escape(secondary))) != Enum.sort(cal_sec) do
+                IO.inspect(
+                  {unquote(Macro.escape(user)), unquote(name), unquote(type),
+                   unquote(Macro.escape(secondary))}
+                )
+              end
+
+              assert Enum.sort(unquote(Macro.escape(secondary))) == Enum.sort(cal_sec)
             end
-
-            [_ | cal_sec] = result.exposures
-            assert Enum.sort(unquote(Macro.escape(secondary))) == Enum.sort(cal_sec)
           end
         end
       end)

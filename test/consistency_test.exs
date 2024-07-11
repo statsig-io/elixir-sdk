@@ -11,45 +11,40 @@ defmodule StatsigEx.ConsistencyTest do
   |> Map.get("data")
   |> generate_all_tests()
 
-  @tag :skip
+  # @tag :skip
   test "one test" do
     result =
       StatsigEx.Evaluator.eval(
         %{
-          "userID" => "123",
-          "appVersion" => "1.2.3-alpha",
+          "appVersion" => "1.3",
+          "ip" => "1.0.0.0",
+          "locale" => "en_US",
+          "statsigEnvironment" => %{"tier" => "DEVELOPMENT"},
           "userAgent" =>
             "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1",
-          "ip" => "1.0.0.0",
-          "locale" => "en_US"
+          "userID" => "123"
         },
-        # "test_exp_50_50_with_targeting_v2",
-        "test_is_us",
+        "test_gate_with_targeting_gate",
         :gate
       )
 
-    [_ | sec] = result.exposures
-    sec = result.exposures |> IO.inspect()
+    secondary = [
+      %{
+        "gate" => "global_holdout",
+        "gateValue" => "false",
+        "ruleID" => "3QoA4ncNdVGBaMt3N1KYjz:0.50:1"
+      },
+      %{
+        "gate" => "test_targeting_gate_with_no_rules",
+        "gateValue" => "false",
+        "ruleID" => "default"
+      }
+    ]
 
-    assert [
-             %{
-               "gate" => "global_holdout",
-               "gateValue" => "false",
-               "ruleID" => "3QoA4ncNdVGBaMt3N1KYjz:0.50:1"
-             },
-             %{"gate" => "test_is_us", "gateValue" => "false", "ruleID" => "default"}
-           ] == Enum.sort(sec)
-  end
+    [_ | sec] = result.exposures |> IO.inspect()
+    # sec = result.exposures |> IO.inspect()
 
-  defp run_tests(
-         %{
-           "user" => user,
-           "feature_gates_v2" => gates,
-           "dynamic_configs" => configs
-         },
-         suite
-       ) do
-    test_gates(user, gates, suite)
+    assert Enum.sort(secondary) == Enum.sort(sec)
   end
 
   def test_gates(user, gates, suite) when is_map(gates) do
