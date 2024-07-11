@@ -15,6 +15,7 @@ defmodule StatsigEx.ExposureLoggingTest do
           if all_conditions_supported?(name, :config) do
             [prim | exp] = Evaluator.eval(user, name, :config).exposures
             assert Enum.sort(exp) == Enum.sort(sec)
+            compare_primary_exposure(user, name, :config)
           end
         end)
       end)
@@ -67,9 +68,26 @@ defmodule StatsigEx.ExposureLoggingTest do
     compare_logs(user, name, :gate)
   end
 
-  defp compare_with_expected(user, id, type) do
+  defp compare_primary_exposure(user, id, type) do
     flush()
-    result = Evaluator.eval(user, id, type)
+    check(user, id, type)
+    [{_, erl_logs} | _rest] = GenServer.call(:statsig_server, {:state})
+    %{events: ex_logs} = StatsigEx.state()
+
+    prune = fn logs ->
+      logs
+      |> Enum.map(fn log ->
+        log
+        |> Map.delete("time")
+        |> Map.delete("secondaryExposures")
+      end)
+    end
+
+    erl = prune.(erl_logs)
+    ex = prune.(ex_logs)
+
+    # , "test: #{inspect(user)} :: #{id} :: #{type}"
+    assert erl == ex
   end
 
   defp compare_logs(user, id, type) do
@@ -82,7 +100,7 @@ defmodule StatsigEx.ExposureLoggingTest do
     erl = Enum.map(erl_logs, &Map.delete(&1, "time"))
     ex = Enum.map(ex_logs, &Map.delete(&1, "time"))
 
-    assert ex == erl
+    assert erl == ex
   end
 
   defp check(user, id, :gate) do

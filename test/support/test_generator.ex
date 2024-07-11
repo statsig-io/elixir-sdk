@@ -1,79 +1,43 @@
 defmodule StatsigEx.TestGenerator do
-  defmacro generate_tests(configs) do
+  defmacro generate_all_tests(configs) do
     quote do
       Enum.flat_map(unquote(configs), fn %{
                                            "user" => user,
                                            "feature_gates_v2" => gates,
                                            "dynamic_configs" => d_configs
                                          } ->
-        Enum.map(gates, fn {name, %{"value" => expected, "secondary_exposures" => sec}} ->
-          # if(!String.contains?(name, "id_list")) do
-          quote do
-            test(
-              unquote(
-                "gate #{name} for #{Map.get(user, "userID")} | #{
-                  :crypto.strong_rand_bytes(8) |> Base.encode64()
-                }"
+        Enum.map(gates, fn {name, spec} -> {:gate, user, name, spec} end) ++
+          Enum.map(d_configs, fn {name, spec} -> {:config, user, name, spec} end)
+      end)
+      |> Enum.map(fn {type, user, name,
+                      %{"value" => expected, "secondary_exposures" => secondary}} ->
+        quote do
+          test(
+            unquote(
+              "#{type} #{name} for #{Map.get(user, "userID")} | #{
+                :crypto.strong_rand_bytes(8) |> Base.encode64()
+              }"
+            )
+          ) do
+            result =
+              StatsigEx.Evaluator.eval(
+                unquote(Macro.escape(user)),
+                unquote(name),
+                unquote(type)
               )
-            ) do
-              result =
-                StatsigEx.Evaluator.eval(
-                  unquote(Macro.escape(user)),
-                  unquote(Macro.escape(name)),
-                  :gate
-                )
 
-              [_ | cal_sec] = result.exposures
-              assert unquote(Macro.escape(expected)) == result.result
-              # assert unquote(Macro.escape(expected)) ==
-              #          StatsigEx.Evaluator.eval(
-              #            unquote(Macro.escape(user)),
-              #            unquote(Macro.escape(name)),
-              #            :gate
-              #          ).result
+            case unquote(type) do
+              :gate ->
+                assert unquote(Macro.escape(expected)) == result.result
 
-              assert Enum.sort(unquote(Macro.escape(sec))) == Enum.sort(cal_sec)
-            end
-          end
-
-          # end
-        end) ++
-          Enum.map(d_configs, fn {name, %{"value" => expected, "secondary_exposures" => sec}} ->
-            # don't do id_lists
-            # if(!String.contains?(name, "id_list")) do
-            quote do
-              # ideally I'd skip some of these dynamically based on what checks we support
-              # @tag skip: ...
-              test(
-                unquote(
-                  "dynamic config #{name} for #{Map.get(user, "userID")} | #{
-                    :crypto.strong_rand_bytes(8) |> Base.encode64()
-                  }"
-                )
-              ) do
-                result =
-                  StatsigEx.Evaluator.eval(
-                    unquote(Macro.escape(user)),
-                    unquote(Macro.escape(name)),
-                    :config
-                  )
-
-                [_ | cal_sec] = result.exposures
-
+              _ ->
                 assert unquote(Macro.escape(expected)) == result.value
-                # assert unquote(Macro.escape(expected)) ==
-                #          StatsigEx.Evaluator.eval(
-                #            unquote(Macro.escape(user)),
-                #            unquote(Macro.escape(name)),
-                #            :config
-                #          ).value
-
-                assert Enum.sort(unquote(Macro.escape(sec))) == Enum.sort(cal_sec)
-              end
             end
 
-            # end
-          end)
+            [_ | cal_sec] = result.exposures
+            assert Enum.sort(unquote(Macro.escape(secondary))) == Enum.sort(cal_sec)
+          end
+        end
       end)
       |> Enum.filter(fn a -> a end)
       |> Enum.each(fn test_case ->

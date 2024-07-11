@@ -9,8 +9,9 @@ defmodule StatsigEx.ConsistencyTest do
   |> File.read!()
   |> Jason.decode!()
   |> Map.get("data")
-  |> generate_tests()
+  |> generate_all_tests()
 
+  @tag :skip
   test "one test" do
     result =
       StatsigEx.Evaluator.eval(
