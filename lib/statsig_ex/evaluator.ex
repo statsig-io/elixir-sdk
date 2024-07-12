@@ -1,70 +1,62 @@
 defmodule StatsigEx.Evaluator do
   # here's what I sitll need to do:
-  # * actually log exposures. These are logs of the gates / configs that are evaluated,
-  #   so each gate / config eval should have one primary exposure and N secondary
-  #   exposures (one for each pass/fail gate conditions encountered along the way).
-  #   Exposures are returned from the evaluator, but I currently just drop them
-  # * add env/tier ("statsigEnvironment") attribute to users (probably pulled in
-  #   from application env)
   # * add metadata headers (sdk version, etc) to API calls
-  # * rejigger the http/api client stuff to possibly be more configurable
+  # * possibly rejigger the http/api client stuff to possibly be more configurable
   # * decide if I want to spin up a supervisor & the genserver automatically
   #   or just continue to have apps call start_link themselves
-
-  # I think I just need to ignore this return value shape for now,
-  # because it's confusing me and holding me back (it doesn't seem consistent anywhere)
-  # {Rule, GateValue, JsonValue, ruleID/reason, Exposures}
-  # {:ok, result, value, exposures}
 
   @unsupported ["ip_based"]
 
   defmodule Result do
     defstruct exposures: [],
               secondary_exposures: [],
-              final: false,
               raw_result: false,
               result: false,
               rule: %{},
-              value: nil,
-              type: :rule
+              value: nil
   end
 
   # this doesn't add the top-level exposure properly
-  def eval(user, spec) when is_map(spec), do: do_eval(user, spec)
+  def eval(user, spec) when is_map(spec),
+    do: eval_and_add_exposure(user, spec, Map.get(spec, "name"))
 
   def eval(user, name, type) do
     case StatsigEx.lookup(name, type) do
       [{_key, spec}] ->
-        result = do_eval(user, spec)
-
-        # if it's a segment, we don't add exposure, I guess?
-        exposures =
-          case name do
-            <<"segment:", _::binary>> ->
-              Enum.reverse(result.exposures)
-
-            _ ->
-              [
-                %{
-                  "gate" => name,
-                  "gateValue" => to_string(result.result),
-                  "ruleID" => Map.get(result.rule, "id")
-                }
-                | Enum.reverse(result.exposures)
-              ]
-          end
-
-        %Result{result | exposures: Enum.uniq(exposures), final: true, type: type}
+        eval_and_add_exposure(user, spec, name)
 
       _other ->
-        %Result{
-          rule: %{"id" => "Unrecognized"},
-          type: type,
-          exposures: [
-            %{"gate" => name, "gateValue" => "false", "ruleID" => "Unrecognized", value: %{}}
-          ]
-        }
+        eval_and_add_exposure(user, nil, name)
     end
+  end
+
+  defp eval_and_add_exposure(_user, nil, name),
+    do: %Result{
+      rule: %{"id" => "Unrecognized"},
+      exposures: [
+        %{"gate" => name, "gateValue" => "false", "ruleID" => "Unrecognized", value: %{}}
+      ]
+    }
+
+  # don't add an exposure for segments (which are represented as gates)
+  defp eval_and_add_exposure(user, spec, <<"segment:", _::binary>>) do
+    result = do_eval(user, spec)
+    %Result{result | exposures: result.exposures |> Enum.reverse() |> Enum.uniq()}
+  end
+
+  defp eval_and_add_exposure(user, spec, name) do
+    result = do_eval(user, spec)
+
+    exposures = [
+      %{
+        "gate" => name,
+        "gateValue" => to_string(result.result),
+        "ruleID" => Map.get(result.rule, "id")
+      }
+      | Enum.reverse(result.exposures)
+    ]
+
+    %Result{result | exposures: Enum.uniq(exposures)}
   end
 
   defp do_eval(_user, %{"enabled" => false, "defaultValue" => default}),
@@ -83,12 +75,12 @@ defmodule StatsigEx.Evaluator do
     )
   end
 
-  # only evaluate as many rules as we need to to find a matching one, right?
+  # only evaluate as many rules as we need to to find a matching one
   defp eval_rules(user, [rule | rest], spec, acc) do
     case eval_one_rule(user, rule, spec) do
       %Result{result: true} = result ->
         final_result = eval_pass_percent(user, rule, spec)
-        # can we just return the result now?
+
         Enum.reduce(
           acc,
           %Result{result | result: final_result, value: Map.get(rule, "returnValue")},
@@ -106,27 +98,19 @@ defmodule StatsigEx.Evaluator do
     results = eval_conditions(user, conds, rule, spec)
 
     # all conditions must match, and we should only include the rule if all match
-    Enum.reduce(results, %Result{result: true, raw_result: true}, fn curr, acc ->
-      # r =
-      #   case Map.keys(acc.rule) do
-      #     [] -> curr.rule
-      #     _ -> acc.rule
-      #   end
+    result =
+      Enum.reduce(results, %Result{result: true, raw_result: true}, fn curr, acc ->
+        %Result{
+          result: curr.result && acc.result,
+          raw_result: curr.raw_result && acc.raw_result,
+          value: acc.value || curr.value,
+          exposures: curr.exposures ++ acc.exposures
+        }
+      end)
 
-      %Result{
-        result: curr.result && acc.result,
-        raw_result: curr.raw_result && acc.raw_result,
-        value: acc.value || curr.value,
-        # rule: r,
-        exposures: curr.exposures ++ acc.exposures,
-        # this is hacky
-        final: curr.final
-      }
-    end)
-    |> case do
-      %{raw_result: true} = result -> %Result{result | rule: rule}
-      result -> result
-    end
+    if result.raw_result || result.result,
+      do: %Result{result | rule: rule},
+      else: result
   end
 
   defp eval_conditions(user, conds, rule, spec, acc \\ [])
@@ -160,22 +144,16 @@ defmodule StatsigEx.Evaluator do
        ) do
     result =
       case eval(user, gate, :gate) do
-        # I don't think I care about the rule returned below, do I? it should be in the exposure
-        # OR, should the rule be the final rule that matched...?
-        # also, should the return value be from this rule or the passed rule...?
         %{result: true} = result ->
           %Result{
             result
             | value: Map.get(rule, "returnValue"),
-              # should it overwrite the rule returned by the gate...?
               rule: rule
           }
 
         other ->
           other
       end
-
-    # |> IO.inspect(label: :pass_gate)
 
     eval_conditions(user, rest, rule, spec, [result | acc])
   end
@@ -184,38 +162,23 @@ defmodule StatsigEx.Evaluator do
          user,
          [%{"type" => "fail_gate", "targetValue" => gate} | rest],
          rule,
-         #  %{"defaultValue" => default} = spec,
          spec,
          acc
        ) do
-    result =
-      case eval(user, gate, :gate) do
-        # false is a pass, since this is a FAIL gate check
-        %{result: false} = res ->
-          %{
-            res
-            | result: true,
-              raw_result: !res.raw_result,
-              value: Map.get(rule, "returnValue"),
-              rule: rule
-          }
+    result = eval(user, gate, :gate)
 
-        # from which spec do we pull the default value...?
-        %{result: true} = res ->
-          %{
-            res
-            | result: false,
-              raw_result: !res.raw_result,
-              # is this right? or should it be the default value?
-              value: Map.get(rule, "returnValue"),
-              # value: default,
-              # if it failed, we shouldn't return a rule at all
-              rule: %{}
-              # rule: rule
-          }
-      end
+    returned_rule =
+      if result.result,
+        do: %{},
+        else: rule
 
-    # |> IO.inspect(label: :fail)
+    result = %Result{
+      result
+      | result: !result.result,
+        raw_result: !result.raw_result,
+        value: Map.get(rule, "returnValue"),
+        rule: returned_rule
+    }
 
     eval_conditions(user, rest, rule, spec, [result | acc])
   end
