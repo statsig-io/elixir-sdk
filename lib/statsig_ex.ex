@@ -64,13 +64,11 @@ defmodule StatsigEx do
   end
 
   def handle_call({:log, event}, _from, state) do
-    # for now, just throw things in there, don't worry about the shape
     {:reply, :ok, Map.put(state, :events, [event | state.events])}
   end
 
   def handle_info(:reload, %{api_key: key, last_sync: time} = state) do
     {:ok, sync_time} = reload_configs(key, time)
-    IO.puts("reloading!")
     Process.send_after(self(), :reload, 60_000)
     {:noreply, Map.put(state, :last_sync, sync_time)}
   end

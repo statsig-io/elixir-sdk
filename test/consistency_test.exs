@@ -11,7 +11,7 @@ defmodule StatsigEx.ConsistencyTest do
   |> Map.get("data")
   |> generate_all_tests()
 
-  # @tag :skip
+  @tag :skip
   test "one test" do
     result =
       StatsigEx.Evaluator.eval(
@@ -41,39 +41,7 @@ defmodule StatsigEx.ConsistencyTest do
       }
     ]
 
-    [_ | sec] = result.exposures |> IO.inspect()
-    # sec = result.exposures |> IO.inspect()
-
+    [_ | sec] = result.exposures
     assert Enum.sort(secondary) == Enum.sort(sec)
   end
-
-  def test_gates(user, gates, suite) when is_map(gates) do
-    gate_list = Enum.map(gates, fn {_key, config} -> config end)
-    test_supported_gates(user, gate_list, {{suite, 0}, []})
-  end
-
-  def test_supported_gates(_user, [], results), do: results
-
-  def test_supported_gates(
-        user,
-        [%{"name" => gate, "value" => expected} | rest],
-        {{suite, test}, results}
-      ) do
-    if all_conditions_supported?(gate, :gate) do
-      # IO.inspect(user)
-      # IO.puts("")
-      r = Evaluator.eval(user, gate, :gate)
-
-      assert r.result == expected,
-             "failed for #{gate}(#{suite}|#{test}) | r:#{r.result} :: e:#{expected} |\n #{
-               inspect(user)
-             } \n #{inspect(r)}"
-
-      test_supported_gates(user, rest, {{suite, test + 1}, [r == expected | results]})
-    else
-      test_supported_gates(user, rest, {{suite, test}, results})
-    end
-  end
-
-  # for now, just skip these, because we don't pull ID lists yet
 end

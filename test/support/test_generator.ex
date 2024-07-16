@@ -19,7 +19,7 @@ defmodule StatsigEx.TestGenerator do
               }"
             )
           ) do
-            # skip if it's not supported
+            # skip if it's not supported (need to eventually support these, though)
             if StatsigEx.PressureTest.all_conditions_supported?(unquote(name), unquote(type)) do
               result =
                 StatsigEx.Evaluator.eval(
@@ -38,21 +38,13 @@ defmodule StatsigEx.TestGenerator do
 
               [_ | cal_sec] = result.exposures
 
-              # spit out the test setup on failures
+              # spit out the test details on failures
               # if Enum.sort(unquote(Macro.escape(secondary))) != Enum.sort(cal_sec) do
-              #   IO.puts("StatsigEx.Evaluator.eval(
-              #     #{unquote(inspect(Macro.escape(user)))},
-              #     #{unquote(name)},
-              #     #{unquote(type)}
-              #   )")
+              #   IO.inspect(
+              #     {unquote(Macro.escape(user)), unquote(name), unquote(type),
+              #      unquote(Macro.escape(secondary))}
+              #   )
               # end
-
-              if Enum.sort(unquote(Macro.escape(secondary))) != Enum.sort(cal_sec) do
-                IO.inspect(
-                  {unquote(Macro.escape(user)), unquote(name), unquote(type),
-                   unquote(Macro.escape(secondary))}
-                )
-              end
 
               assert Enum.sort(unquote(Macro.escape(secondary))) == Enum.sort(cal_sec)
             end

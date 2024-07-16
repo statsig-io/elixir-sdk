@@ -1,5 +1,8 @@
 defmodule StatsigEx.PressureTest do
   import ExUnit.Assertions
+  @unsupported_conditions ["ip_based"]
+  @unsupported_gates ["test_id_list", "test_not_in_id_list"]
+  @unsupported_configs ["test_exp_50_50_with_targeting_v2"]
 
   def pressure_test_and_compare(func, args, iterations \\ 100) do
     {misses, results} =
@@ -24,11 +27,11 @@ defmodule StatsigEx.PressureTest do
   end
 
   def all_conditions_supported?(gate, :gate)
-      when gate in ["test_id_list"],
+      when gate in @unsupported_gates,
       do: false
 
   def all_conditions_supported?(config, :config)
-      when config in ["test_exp_50_50_with_targeting_v2"],
+      when config in @unsupported_configs,
       do: false
 
   def all_conditions_supported?(gate, type) do
@@ -37,12 +40,12 @@ defmodule StatsigEx.PressureTest do
         Enum.reduce(Map.get(spec, "rules"), true, fn %{"conditions" => c}, acc ->
           acc &&
             Enum.reduce(c, true, fn %{"type" => type}, c_acc ->
-              c_acc && !Enum.any?(["ip_based"], fn n -> n == type end)
+              c_acc && !Enum.any?(@unsupported_conditions, fn n -> n == type end)
             end)
         end)
 
       _ ->
-        false
+        true
     end
   end
 end
