@@ -26,16 +26,16 @@ defmodule StatsigEx.PressureTest do
            }"
   end
 
-  def all_conditions_supported?(gate, :gate)
+  def all_conditions_supported?(gate, :gate, _server)
       when gate in @unsupported_gates,
       do: false
 
-  def all_conditions_supported?(config, :config)
+  def all_conditions_supported?(config, :config, _server)
       when config in @unsupported_configs,
       do: false
 
-  def all_conditions_supported?(gate, type) do
-    case StatsigEx.lookup(gate, type) do
+  def all_conditions_supported?(gate, type, server) do
+    case StatsigEx.lookup(gate, type, server) do
       [{_key, spec}] ->
         Enum.reduce(Map.get(spec, "rules"), true, fn %{"conditions" => c}, acc ->
           acc &&

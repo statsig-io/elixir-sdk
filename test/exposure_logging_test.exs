@@ -14,13 +14,13 @@ defmodule StatsigEx.ExposureLoggingTest do
       |> Map.get("data")
       |> Enum.each(fn %{"user" => user, "dynamic_configs" => configs, "feature_gates_v2" => gates} ->
         Enum.each(configs, fn {name, _} ->
-          if all_conditions_supported?(name, :config) do
+          if all_conditions_supported?(name, :config, :test) do
             compare_primary_exposure(user, name, :config)
           end
         end)
 
         Enum.each(gates, fn {name, _} ->
-          if all_conditions_supported?(name, :gate) do
+          if all_conditions_supported?(name, :gate, :test) do
             compare_primary_exposure(user, name, :gate)
           end
         end)

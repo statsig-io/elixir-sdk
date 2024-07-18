@@ -12,18 +12,29 @@ defmodule StatsigEx.Evaluator do
               secondary_exposures: [],
               raw_result: false,
               result: false,
+              reason: nil,
               rule: %{},
               value: nil
   end
 
+  defmodule Context do
+    defstruct spec: %{}, server: nil
+  end
+
   # this doesn't add the top-level exposure properly
   def eval(user, spec) when is_map(spec),
-    do: eval_and_add_exposure(user, spec, Map.get(spec, "name"))
+    do: eval_and_add_exposure(user, spec, %Context{spec: Map.get(spec, "name")})
 
-  def eval(user, name, type) do
-    case StatsigEx.lookup(name, type) do
+  def eval(user, name, type, server \\ nil) do
+    # if server is nil, don't pass it along, let the central module to determine defaults
+    if is_nil(server) do
+      StatsigEx.lookup(name, type)
+    else
+      StatsigEx.lookup(name, type, server)
+    end
+    |> case do
       [{_key, spec}] ->
-        eval_and_add_exposure(user, spec, name)
+        eval_and_add_exposure(user, %Context{spec: spec, server: server}, name)
 
       _other ->
         eval_and_add_exposure(user, nil, name)
@@ -33,19 +44,20 @@ defmodule StatsigEx.Evaluator do
   defp eval_and_add_exposure(_user, nil, name),
     do: %Result{
       rule: %{"id" => "Unrecognized"},
+      reason: :not_found,
       exposures: [
         %{"gate" => name, "gateValue" => "false", "ruleID" => "Unrecognized", value: %{}}
       ]
     }
 
   # don't add an exposure for segments (which are represented as gates)
-  defp eval_and_add_exposure(user, spec, <<"segment:", _::binary>>) do
-    result = do_eval(user, spec)
+  defp eval_and_add_exposure(user, ctx, <<"segment:", _::binary>>) do
+    result = do_eval(user, ctx)
     %Result{result | exposures: result.exposures |> Enum.reverse() |> Enum.uniq()}
   end
 
-  defp eval_and_add_exposure(user, spec, name) do
-    result = do_eval(user, spec)
+  defp eval_and_add_exposure(user, ctx, name) do
+    result = do_eval(user, ctx)
 
     exposures = [
       %{
@@ -59,16 +71,16 @@ defmodule StatsigEx.Evaluator do
     %Result{result | exposures: Enum.uniq(exposures)}
   end
 
-  defp do_eval(_user, %{"enabled" => false, "defaultValue" => default}),
-    do: %Result{value: default, rule: %{"id" => "disabled"}}
+  defp do_eval(_user, %Context{spec: %{"enabled" => false, "defaultValue" => default}}),
+    do: %Result{value: default, rule: %{"id" => "disabled"}, reason: :disabled}
 
-  defp do_eval(user, %{"rules" => rules} = spec), do: eval_rules(user, rules, spec, [])
+  defp do_eval(user, %Context{spec: %{"rules" => rules}} = ctx),
+    do: eval_rules(user, rules, ctx, [])
 
-  defp eval_rules(_user, [], %{"defaultValue" => default}, results) do
-    # need to combine exposures, I guess, right?
+  defp eval_rules(_user, [], %Context{spec: %{"defaultValue" => default}}, results) do
     Enum.reduce(
       results,
-      %Result{result: false, value: default, rule: %{"id" => "default"}},
+      %Result{result: false, value: default, rule: %{"id" => "default"}, reason: :no_rule_match},
       fn r, final ->
         %Result{final | exposures: r.exposures ++ final.exposures}
       end
@@ -76,26 +88,31 @@ defmodule StatsigEx.Evaluator do
   end
 
   # only evaluate as many rules as we need to to find a matching one
-  defp eval_rules(user, [rule | rest], spec, acc) do
-    case eval_one_rule(user, rule, spec) do
+  defp eval_rules(user, [rule | rest], ctx, acc) do
+    case eval_one_rule(user, rule, ctx) do
       %Result{result: true} = result ->
-        final_result = eval_pass_percent(user, rule, spec)
+        final_result = eval_pass_percent(user, rule, ctx)
 
         Enum.reduce(
           acc,
-          %Result{result | result: final_result, value: Map.get(rule, "returnValue")},
+          %Result{
+            result
+            | result: final_result,
+              value: Map.get(rule, "returnValue"),
+              reason: :rule_match
+          },
           fn r, final ->
             %Result{final | exposures: r.exposures ++ final.exposures}
           end
         )
 
       result ->
-        eval_rules(user, rest, spec, [result | acc])
+        eval_rules(user, rest, ctx, [result | acc])
     end
   end
 
-  defp eval_one_rule(user, %{"conditions" => conds} = rule, spec) do
-    results = eval_conditions(user, conds, rule, spec)
+  defp eval_one_rule(user, %{"conditions" => conds} = rule, ctx) do
+    results = eval_conditions(user, conds, rule, ctx)
 
     # all conditions must match, and we should only include the rule if all match
     result =
@@ -113,8 +130,8 @@ defmodule StatsigEx.Evaluator do
       else: result
   end
 
-  defp eval_conditions(user, conds, rule, spec, acc \\ [])
-  defp eval_conditions(_user, [], _rule, _spec, acc), do: acc
+  defp eval_conditions(user, conds, rule, ctx, acc \\ [])
+  defp eval_conditions(_user, [], _rule, _ctx, acc), do: acc
 
   # public conditions are final, so short-circuit this and return
   # gotta figure out how to make these final when they happen via pass/fail_gate
@@ -122,7 +139,7 @@ defmodule StatsigEx.Evaluator do
          _user,
          [%{"type" => "public"} | _rest],
          rule,
-         _spec,
+         _ctx,
          acc
        ),
        do: [
@@ -139,11 +156,11 @@ defmodule StatsigEx.Evaluator do
          user,
          [%{"type" => "pass_gate", "targetValue" => gate} | rest],
          rule,
-         spec,
+         ctx,
          acc
        ) do
     result =
-      case eval(user, gate, :gate) do
+      case eval(user, gate, :gate, ctx.server) do
         %{result: true} = result ->
           %Result{
             result
@@ -155,17 +172,17 @@ defmodule StatsigEx.Evaluator do
           other
       end
 
-    eval_conditions(user, rest, rule, spec, [result | acc])
+    eval_conditions(user, rest, rule, ctx, [result | acc])
   end
 
   defp eval_conditions(
          user,
          [%{"type" => "fail_gate", "targetValue" => gate} | rest],
          rule,
-         spec,
+         ctx,
          acc
        ) do
-    result = eval(user, gate, :gate)
+    result = eval(user, gate, :gate, ctx.server)
 
     returned_rule =
       if result.result,
@@ -180,22 +197,22 @@ defmodule StatsigEx.Evaluator do
         rule: returned_rule
     }
 
-    eval_conditions(user, rest, rule, spec, [result | acc])
+    eval_conditions(user, rest, rule, ctx, [result | acc])
   end
 
   # ip_based compares are unsupported for now
-  defp eval_conditions(user, [%{"type" => type} | rest], rule, spec, acc)
+  defp eval_conditions(user, [%{"type" => type} | rest], rule, ctx, acc)
        when type in @unsupported do
     IO.puts("unsupported type: #{type}")
     # not sure why raw_result is true here, but that's what the erlang client does...?
-    eval_conditions(user, rest, rule, spec, [%Result{result: false, raw_result: true} | acc])
+    eval_conditions(user, rest, rule, ctx, [%Result{result: false, raw_result: true} | acc])
   end
 
   defp eval_conditions(
          user,
          [%{"targetValue" => target, "operator" => op} = c | rest],
          rule,
-         spec,
+         ctx,
          acc
        ) do
     val = extract_value_to_compare(user, c)
@@ -211,7 +228,7 @@ defmodule StatsigEx.Evaluator do
           %Result{result: r, raw_result: false, value: Map.get(rule, "returnValue"), rule: rule}
       end
 
-    eval_conditions(user, rest, rule, spec, [result | acc])
+    eval_conditions(user, rest, rule, ctx, [result | acc])
   end
 
   defp extract_value_to_compare(user, %{"type" => "user_field", "field" => field}),
@@ -259,10 +276,12 @@ defmodule StatsigEx.Evaluator do
     rem(hash, 1_000)
   end
 
-  defp eval_pass_percent(_user, %{"passPercentage" => 100}, _spec), do: true
-  defp eval_pass_percent(_user, %{"passPercentage" => 0}, _spec), do: false
+  defp eval_pass_percent(_user, %{"passPercentage" => 100}, _ctx), do: true
+  defp eval_pass_percent(_user, %{"passPercentage" => 0}, _ctx), do: false
 
-  defp eval_pass_percent(user, %{"passPercentage" => perc, "idType" => prop} = rule, spec) do
+  defp eval_pass_percent(user, %{"passPercentage" => perc, "idType" => prop} = rule, %Context{
+         spec: spec
+       }) do
     spec_salt = Map.get(spec, "salt", Map.get(spec, "id", ""))
     rule_salt = Map.get(rule, "salt", Map.get(rule, "id", ""))
     id = get_user_id(user, prop)
@@ -359,10 +378,7 @@ defmodule StatsigEx.Evaluator do
     end
   end
 
-  defp compare(_, _, op) do
-    # IO.inspect(op, label: :unsupported_compare)
-    false
-  end
+  defp compare(_, _, _op), do: false
 
   defp parse_versions_to_compare(a, b) do
     a = simple_version_parse(a)

@@ -25,7 +25,8 @@ defmodule StatsigEx.ConsistencyTest do
           "userID" => "123"
         },
         "test_gate_with_targeting_gate",
-        :gate
+        :gate,
+        :test
       )
 
     secondary = [

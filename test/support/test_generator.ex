@@ -9,6 +9,7 @@ defmodule StatsigEx.TestGenerator do
         Enum.map(gates, fn {name, spec} -> {:gate, user, name, spec} end) ++
           Enum.map(d_configs, fn {name, spec} -> {:config, user, name, spec} end)
       end)
+      # |> Enum.take(10)
       |> Enum.map(fn {type, user, name,
                       %{"value" => expected, "secondary_exposures" => secondary}} ->
         quote do
@@ -20,12 +21,17 @@ defmodule StatsigEx.TestGenerator do
             )
           ) do
             # skip if it's not supported (need to eventually support these, though)
-            if StatsigEx.PressureTest.all_conditions_supported?(unquote(name), unquote(type)) do
+            if StatsigEx.PressureTest.all_conditions_supported?(
+                 unquote(name),
+                 unquote(type),
+                 :test
+               ) do
               result =
                 StatsigEx.Evaluator.eval(
                   unquote(Macro.escape(user)),
                   unquote(name),
-                  unquote(type)
+                  unquote(type),
+                  :test
                 )
 
               case unquote(type) do

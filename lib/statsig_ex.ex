@@ -2,61 +2,85 @@ defmodule StatsigEx do
   use GenServer
   alias StatsigEx.Utils
 
-  # we might need to allow for a name to be passed so we can test things
   def start_link(opts \\ []) do
-    # should pull from an env var here
-    opts = Keyword.put_new(opts, :api_key, {:env, "STATSIG_API_KEY"})
+    # pull from env if not passed in
+    opts =
+      opts
+      |> Keyword.put_new(:api_key, {:system, "STATSIG_API_KEY"})
+      |> Keyword.put_new(:name, __MODULE__)
 
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: Keyword.fetch!(opts, :name))
   end
 
   def init(opts) do
-    :ets.new(ets_name(), [:named_table])
+    server = Keyword.fetch!(opts, :name)
+    :ets.new(ets_name(server), [:named_table])
 
     state = %{
       api_key: get_api_key(Keyword.fetch!(opts, :api_key)),
       last_sync: 0,
-      events: []
+      events: [],
+      prefix: server
     }
 
-    {:ok, last_sync} = reload_configs(state.api_key, state.last_sync)
+    {:ok, last_sync} = reload_configs(state.api_key, state.last_sync, server)
 
-    # reload every 60s
+    # reload every 60s by default
     Process.send_after(self(), :reload, 60_000)
     {:ok, Map.put(state, :last_sync, last_sync)}
   end
 
-  def check_gate(user, gate) do
+  def check_gate(user, gate, server \\ __MODULE__)
+  def check_gate(nil, _gate, _server), do: {:error, :no_user}
+
+  def check_gate(user, gate, server) do
     user = Utils.get_user_with_env(user)
 
-    result = StatsigEx.Evaluator.eval(user, gate, :gate)
+    result = StatsigEx.Evaluator.eval(user, gate, :gate, server)
+    log_exposures(server, user, result.exposures, :gate)
 
-    log_exposures(user, result.exposures, :gate)
-    result.result
+    case result do
+      %{reason: :not_found} -> {:error, :not_found}
+      _ -> {:ok, result.result}
+    end
+
+    # result.result
   end
 
-  def get_config(user, config) do
+  def get_config(user, config, server \\ __MODULE__)
+  def get_config(nil, _config, _server), do: {:error, :no_user}
+
+  def get_config(user, config, server) do
     user = Utils.get_user_with_env(user)
-    result = StatsigEx.Evaluator.eval(user, config, :config)
-    log_exposures(user, result.exposures, :config)
+    result = StatsigEx.Evaluator.eval(user, config, :config, server)
+    log_exposures(server, user, result.exposures, :config)
 
     # could probably hand back a Result struct
-    %{rule_id: Map.get(result.rule, "id"), value: result.value}
+    case result do
+      %{reason: :not_found} -> {:error, :not_found}
+      _ -> %{rule_id: Map.get(result.rule, "id"), value: result.value}
+    end
   end
 
   def get_experiment(user, exp), do: get_config(user, exp)
+  def get_experiment(user, exp, server), do: get_config(user, exp, server)
 
-  def state, do: GenServer.call(__MODULE__, :state)
+  def state(server \\ __MODULE__), do: GenServer.call(server, :state)
 
-  def lookup(name, type), do: :ets.lookup(ets_name(), {name, type})
-  def all(type), do: :ets.match(ets_name(), {{:"$1", type}, :_}) |> List.flatten()
+  def lookup(name, type, server \\ __MODULE__), do: :ets.lookup(ets_name(server), {name, type})
 
-  def ets_name, do: :statsig_ex_store
+  def all(type, server \\ __MODULE__),
+    do: :ets.match(ets_name(server), {{:"$1", type}, :_}) |> List.flatten()
+
+  def ets_name(server) do
+    [server, :statsig_ex_store]
+    |> Enum.join("_")
+    |> String.replace(".", "_")
+    |> String.to_atom()
+  end
 
   # for debugging
-  def handle_call(:state, _from, state) do
-    {:reply, state, state}
-  end
+  def handle_call(:state, _from, state), do: {:reply, state, state}
 
   def handle_call(:flush, _from, %{api_key: key, events: events} = state) do
     unsent = flush_events(key, events)
@@ -67,8 +91,8 @@ defmodule StatsigEx do
     {:reply, :ok, Map.put(state, :events, [event | state.events])}
   end
 
-  def handle_info(:reload, %{api_key: key, last_sync: time} = state) do
-    {:ok, sync_time} = reload_configs(key, time)
+  def handle_info(:reload, %{api_key: key, last_sync: time, prefix: server} = state) do
+    {:ok, sync_time} = reload_configs(key, time, server)
     Process.send_after(self(), :reload, 60_000)
     {:noreply, Map.put(state, :last_sync, sync_time)}
   end
@@ -79,9 +103,9 @@ defmodule StatsigEx do
   end
 
   # shouldn't log anything...
-  defp log_exposures(_user, [], _type), do: :ok
+  defp log_exposures(_server, _user, [], _type), do: :ok
 
-  defp log_exposures(user, [%{"gate" => c, "ruleID" => r} | secondary], :config) do
+  defp log_exposures(server, user, [%{"gate" => c, "ruleID" => r} | secondary], :config) do
     primary = %{
       "config" => c,
       "ruleID" => r
@@ -91,21 +115,21 @@ defmodule StatsigEx do
       base_event(user, secondary, :config)
       |> Map.put("metadata", primary)
 
-    GenServer.call(__MODULE__, {:log, event})
+    GenServer.call(server, {:log, event})
   end
 
-  defp log_exposures(user, [primary | secondary], type) do
+  defp log_exposures(server, user, [primary | secondary], type) do
     event =
       base_event(user, secondary, type)
       |> Map.put("metadata", primary)
 
-    GenServer.call(__MODULE__, {:log, event})
+    GenServer.call(server, {:log, event})
   end
 
   defp base_event(user, secondary, type) do
     user = Utils.sanitize_user(user)
 
-    event = %{
+    %{
       "eventName" => "statsig::#{type}_exposure",
       "secondaryExposures" => secondary,
       "time" => DateTime.utc_now() |> DateTime.to_unix(:millisecond),
@@ -113,19 +137,19 @@ defmodule StatsigEx do
     }
   end
 
-  defp reload_configs(api_key, since) do
+  defp reload_configs(api_key, since, server) do
     # call Statsig API to get configs (eventually we can make the http client configurable)
     # should probably crash on startup but be resilient on reload; will fix later
     {:ok, config} = api_client().download_config_specs(api_key, since)
 
-    config |> Map.get("feature_gates", []) |> save_configs(:gate)
-    config |> Map.get("dynamic_configs", []) |> save_configs(:config)
+    config |> Map.get("feature_gates", []) |> save_configs(:gate, server)
+    config |> Map.get("dynamic_configs", []) |> save_configs(:config, server)
 
     # return the time of this last fetch
     {:ok, Map.get(config, "time", since)}
   end
 
-  def flush, do: GenServer.call(__MODULE__, :flush)
+  def flush(server \\ __MODULE__), do: GenServer.call(server, :flush)
 
   defp flush_events(_key, []), do: []
 
@@ -135,23 +159,24 @@ defmodule StatsigEx do
     |> Enum.chunk_every(500)
     |> Enum.reduce([], fn chunk, unsent ->
       # this probably doesn't work yet, but I'm not really worried about it right now
-      {:ok, resp} = api_client().push_logs(key, chunk)
-      [resp | unsent]
+      {:ok, failed} = api_client().push_logs(key, chunk)
+      [failed | unsent]
     end)
     |> List.flatten()
   end
 
-  defp get_api_key({:env, var}), do: System.get_env(var)
+  defp get_api_key({atom, var}) when atom in [:system, :env], do: System.get_env(var)
   defp get_api_key(key), do: key
 
-  defp save_configs([], _), do: :ok
+  defp save_configs([], _, _), do: :ok
 
-  defp save_configs([%{"name" => name} = head | tail], type) when is_binary(name) do
-    :ets.insert(ets_name(), {{name, type}, head})
-    save_configs(tail, type)
+  defp save_configs([%{"name" => name} = head | tail], type, server) when is_binary(name) do
+    :ets.insert(ets_name(server), {{name, type}, head})
+    save_configs(tail, type, server)
   end
 
-  defp save_configs([_head | tail], type), do: save_configs(tail, type)
+  # config has no name, so skip it
+  defp save_configs([_head | tail], type, server), do: save_configs(tail, type, server)
 
   defp api_client, do: Application.get_env(:statsig_ex, :api_client, StatsigEx.APIClient)
 end
