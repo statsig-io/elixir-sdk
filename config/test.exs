@@ -1,7 +1,7 @@
 use Mix.Config
 
 config :statsig_ex,
-  api_client: TestAPIClient,
+  api_client: StatsigEx.TestAPIClient,
   env_tier: "test"
 
 # this is for configuring the statsig_erl lib

@@ -1,4 +1,4 @@
-defmodule TestAPIClient do
+defmodule StatsigEx.TestAPIClient do
   def download_config_specs(_key, 0) do
     # "test/data/simple_config.json"
     "test/data/rulesets_e2e_config.json"

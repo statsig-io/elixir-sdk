@@ -30,6 +30,8 @@ defmodule StatsigEx do
     {:ok, Map.put(state, :last_sync, last_sync)}
   end
 
+  # should we support default value?
+  # when would we fallback to it, only when the flag doesn't exist?
   def check_gate(user, gate, server \\ __MODULE__)
   def check_gate(nil, _gate, _server), do: {:error, :no_user}
 
@@ -178,5 +180,6 @@ defmodule StatsigEx do
   # config has no name, so skip it
   defp save_configs([_head | tail], type, server), do: save_configs(tail, type, server)
 
+  # should maybe accept this as part of initialization, too, so different pids can use different clients
   defp api_client, do: Application.get_env(:statsig_ex, :api_client, StatsigEx.APIClient)
 end
