@@ -20,6 +20,7 @@ defmodule StatsigEx do
       api_key: get_api_key(Keyword.fetch!(opts, :api_key)),
       last_sync: 0,
       events: [],
+      tier: Keyword.get(opts, :tier, Application.get_env(:statsig_ex, :env_tier, nil)),
       prefix: server
     }
 
@@ -36,7 +37,7 @@ defmodule StatsigEx do
   def check_gate(nil, _gate, _server), do: {:error, :no_user}
 
   def check_gate(user, gate, server) do
-    user = Utils.get_user_with_env(user)
+    user = Utils.get_user_with_env(user, get_tier(server))
 
     result = StatsigEx.Evaluator.eval(user, gate, :gate, server)
     log_exposures(server, user, result.exposures, :gate)
@@ -102,6 +103,13 @@ defmodule StatsigEx do
   def handle_info(:flush, %{api_key: key, events: events} = state) do
     remaining = flush_events(key, events)
     {:noreply, Map.put(state, :events, remaining)}
+  end
+
+  defp get_tier(server) do
+    case state(server) do
+      %{tier: t} -> t
+      _ -> nil
+    end
   end
 
   # shouldn't log anything...
