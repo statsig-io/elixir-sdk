@@ -1,4 +1,5 @@
 defmodule StatsigEx.APIClient do
+  # we need to handle failure responses here
   def download_config_specs(api_key, since \\ 0) do
     {:ok, resp} =
       HTTPoison.get(

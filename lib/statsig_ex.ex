@@ -3,10 +3,9 @@ defmodule StatsigEx do
   alias StatsigEx.Utils
 
   def start_link(opts \\ []) do
-    # pull from env if not passed in
     opts =
       opts
-      |> Keyword.put_new(:api_key, {:system, "STATSIG_API_KEY"})
+      |> Keyword.put_new(:api_key, get_api_key_opt(opts))
       |> Keyword.put_new(:name, __MODULE__)
 
     GenServer.start_link(__MODULE__, opts, name: Keyword.fetch!(opts, :name))
@@ -24,11 +23,18 @@ defmodule StatsigEx do
       prefix: server
     }
 
+    # if the api key is blank, we should probably just shutdown
+    # case state.api_key do
+    #   v when v in [nil, ""] ->
+    #     {:stop, :normal}
+
+    #   _ ->
     {:ok, last_sync} = reload_configs(state.api_key, state.last_sync, server)
 
     # reload every 60s by default
     Process.send_after(self(), :reload, 60_000)
     {:ok, Map.put(state, :last_sync, last_sync)}
+    # end
   end
 
   # should we support default value?
@@ -103,6 +109,21 @@ defmodule StatsigEx do
   def handle_info(:flush, %{api_key: key, events: events} = state) do
     remaining = flush_events(key, events)
     {:noreply, Map.put(state, :events, remaining)}
+  end
+
+  defp get_api_key_opt(opts) do
+    opts
+    |> Keyword.fetch(:api_key)
+    |> case do
+      {:ok, k} ->
+        k
+
+      _ ->
+        case Application.get_env(:statsig, :api_key) do
+          nil -> {:system, "STATSIG_API_KEY"}
+          v -> v
+        end
+    end
   end
 
   defp get_tier(server) do

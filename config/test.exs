@@ -7,5 +7,5 @@ config :statsig_ex,
 # this is for configuring the statsig_erl lib
 config :statsig,
   network: :test_network,
-  statsig_api_key: "123",
+  api_key: "123",
   statsig_environment_tier: "test"
