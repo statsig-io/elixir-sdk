@@ -17,8 +17,8 @@ defmodule StatsigEx.APIClient do
       [{"STATSIG-API-KEY", api_key}, {"Content-Type", "application/json"}]
     )
     |> case do
-      {:ok, %{status_code: code}} when code < 300 -> []
-      _ -> logs
+      {:ok, %{status_code: code}} when code < 300 -> {:ok, []}
+      _ -> {:error, logs}
     end
   end
 end

@@ -205,7 +205,7 @@ defmodule StatsigEx do
     events
     |> Enum.chunk_every(500)
     |> Enum.reduce([], fn chunk, unsent ->
-      {:ok, failed} = api_client().push_logs(key, chunk)
+      {_, failed} = api_client().push_logs(key, chunk)
       [failed | unsent]
     end)
     |> List.flatten()
