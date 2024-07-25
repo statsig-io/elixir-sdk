@@ -1,6 +1,6 @@
 defmodule StatsigEx.APIClient do
-  # we need to handle failure responses here
   def download_config_specs(api_key, since \\ 0) do
+    # let it crash if it can't pull the specs. This will prevent startup, but that's probably a good thing
     {:ok, resp} =
       HTTPoison.get(
         "https://statsigapi.net/v1/download_config_specs?sinceTime=#{since}",
@@ -11,14 +11,14 @@ defmodule StatsigEx.APIClient do
   end
 
   def push_logs(api_key, logs) do
-    {:ok, resp} =
-      HTTPoison.post(
-        "https://statsigapi.net/v1/rgstr",
-        Jason.encode!(%{"events" => logs}),
-        [{"STATSIG-API-KEY", api_key}, {"Content-Type", "application/json"}]
-      )
-
-    # if it fails, just return all logs
-    if resp.status_code < 300, do: [], else: logs
+    HTTPoison.post(
+      "https://statsigapi.net/v1/rgstr",
+      Jason.encode!(%{"events" => logs}),
+      [{"STATSIG-API-KEY", api_key}, {"Content-Type", "application/json"}]
+    )
+    |> case do
+      {:ok, %{status_code: code}} when code < 300 -> []
+      _ -> logs
+    end
   end
 end

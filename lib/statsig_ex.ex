@@ -2,6 +2,10 @@ defmodule StatsigEx do
   use GenServer
   alias StatsigEx.Utils
 
+  # default intervals
+  @flush_interval 60_000
+  @reload_interval 60_000
+
   def start_link(opts \\ []) do
     opts =
       opts
@@ -15,12 +19,17 @@ defmodule StatsigEx do
     server = Keyword.fetch!(opts, :name)
     :ets.new(ets_name(server), [:named_table])
 
+    # so we can try to flush events before shutdown
+    Process.flag(:trap_exit, true)
+
     state = %{
       api_key: get_api_key(Keyword.fetch!(opts, :api_key)),
       last_sync: 0,
       events: [],
       tier: Keyword.get(opts, :tier, Application.get_env(:statsig_ex, :env_tier, nil)),
-      prefix: server
+      prefix: server,
+      flush_interval: Keyword.get(opts, :flush_interval, @flush_interval),
+      reload_interval: Keyword.get(opts, :reload_interval, @reload_interval)
     }
 
     # if the api key is blank, we should probably just shutdown
@@ -32,7 +41,8 @@ defmodule StatsigEx do
     {:ok, last_sync} = reload_configs(state.api_key, state.last_sync, server)
 
     # reload every 60s by default
-    Process.send_after(self(), :reload, 60_000)
+    Process.send_after(self(), :reload, state.reload_interval)
+    Process.send_after(self(), :flush, state.flush_interval)
     {:ok, Map.put(state, :last_sync, last_sync)}
     # end
   end
@@ -100,16 +110,22 @@ defmodule StatsigEx do
     {:reply, :ok, Map.put(state, :events, [event | state.events])}
   end
 
-  def handle_info(:reload, %{api_key: key, last_sync: time, prefix: server} = state) do
+  def handle_info(
+        :reload,
+        %{api_key: key, last_sync: time, prefix: server, reload_interval: i} = state
+      ) do
     {:ok, sync_time} = reload_configs(key, time, server)
-    Process.send_after(self(), :reload, 60_000)
+    Process.send_after(self(), :reload, i)
     {:noreply, Map.put(state, :last_sync, sync_time)}
   end
 
-  def handle_info(:flush, %{api_key: key, events: events} = state) do
+  def handle_info(:flush, %{api_key: key, events: events, flush_interval: i} = state) do
     remaining = flush_events(key, events)
+    Process.send_after(self(), :flush, i)
     {:noreply, Map.put(state, :events, remaining)}
   end
+
+  def terminate(_reason, %{api_key: key, events: events}), do: flush_events(key, events)
 
   defp get_api_key_opt(opts) do
     opts
@@ -189,7 +205,6 @@ defmodule StatsigEx do
     events
     |> Enum.chunk_every(500)
     |> Enum.reduce([], fn chunk, unsent ->
-      # this probably doesn't work yet, but I'm not really worried about it right now
       {:ok, failed} = api_client().push_logs(key, chunk)
       [failed | unsent]
     end)
