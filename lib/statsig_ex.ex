@@ -19,7 +19,7 @@ defmodule StatsigEx do
     server = Keyword.fetch!(opts, :name)
     :ets.new(ets_name(server), [:named_table])
 
-    # so we can try to flush events before shutdown
+    # so we can attempt to flush events before shutdown
     Process.flag(:trap_exit, true)
 
     state = %{
@@ -32,23 +32,15 @@ defmodule StatsigEx do
       reload_interval: Keyword.get(opts, :reload_interval, @reload_interval)
     }
 
-    # if the api key is blank, we should probably just shutdown
-    # case state.api_key do
-    #   v when v in [nil, ""] ->
-    #     {:stop, :normal}
+    # crash if loading fails on startup
+    {:ok, last_sync} = reload_configs(state.api_key, state.last_sync, server, true)
 
-    #   _ ->
-    {:ok, last_sync} = reload_configs(state.api_key, state.last_sync, server)
-
-    # reload every 60s by default
     Process.send_after(self(), :reload, state.reload_interval)
     Process.send_after(self(), :flush, state.flush_interval)
     {:ok, Map.put(state, :last_sync, last_sync)}
     # end
   end
 
-  # should we support default value?
-  # when would we fallback to it, only when the flag doesn't exist?
   def check_gate(user, gate, server \\ __MODULE__)
   def check_gate(nil, _gate, _server), do: {:error, :no_user}
 
@@ -62,8 +54,6 @@ defmodule StatsigEx do
       %{reason: :not_found} -> {:error, :not_found}
       _ -> {:ok, result.result}
     end
-
-    # result.result
   end
 
   def get_config(user, config, server \\ __MODULE__)
@@ -77,6 +67,7 @@ defmodule StatsigEx do
     # could probably hand back a Result struct
     case result do
       %{reason: :not_found} -> {:error, :not_found}
+      # should this be {:ok, result}?
       _ -> %{rule_id: Map.get(result.rule, "id"), value: result.value}
     end
   end
@@ -106,9 +97,8 @@ defmodule StatsigEx do
     {:reply, unsent, Map.put(state, :events, unsent)}
   end
 
-  def handle_call({:log, event}, _from, state) do
-    {:reply, :ok, Map.put(state, :events, [event | state.events])}
-  end
+  def handle_call({:log, event}, _from, state),
+    do: {:reply, :ok, Map.put(state, :events, [event | state.events])}
 
   def handle_info(
         :reload,
@@ -116,7 +106,7 @@ defmodule StatsigEx do
       ) do
     {:ok, sync_time} = reload_configs(key, time, server)
     Process.send_after(self(), :reload, i)
-    {:noreply, Map.put(state, :last_sync, sync_time)}
+    {:noreply, Map.put(state, :last_sync, sync_time || time)}
   end
 
   def handle_info(:flush, %{api_key: key, events: events, flush_interval: i} = state) do
@@ -125,7 +115,8 @@ defmodule StatsigEx do
     {:noreply, Map.put(state, :events, remaining)}
   end
 
-  def terminate(_reason, %{api_key: key, events: events}), do: flush_events(key, events)
+  def terminate(_reason, %{api_key: key, events: events}),
+    do: flush_events(key, events)
 
   defp get_api_key_opt(opts) do
     opts
@@ -149,7 +140,6 @@ defmodule StatsigEx do
     end
   end
 
-  # shouldn't log anything...
   defp log_exposures(_server, _user, [], _type), do: :ok
 
   defp log_exposures(server, user, [%{"gate" => c, "ruleID" => r} | secondary], :config) do
@@ -184,16 +174,23 @@ defmodule StatsigEx do
     }
   end
 
-  defp reload_configs(api_key, since, server) do
+  defp reload_configs(api_key, since, server, crash \\ false) do
     # call Statsig API to get configs (eventually we can make the http client configurable)
-    # should probably crash on startup but be resilient on reload; will fix later
-    {:ok, config} = api_client().download_config_specs(api_key, since)
+    case {api_client().download_config_specs(api_key, since), crash} do
+      {{:ok, config}, _} ->
+        config |> Map.get("feature_gates", []) |> save_configs(:gate, server)
+        config |> Map.get("dynamic_configs", []) |> save_configs(:config, server)
+        # return the time of this last fetch
+        {:ok, Map.get(config, "time", since)}
 
-    config |> Map.get("feature_gates", []) |> save_configs(:gate, server)
-    config |> Map.get("dynamic_configs", []) |> save_configs(:config, server)
+      {_, false} ->
+        # failed, but shouldn't crash
+        {:ok, nil}
 
-    # return the time of this last fetch
-    {:ok, Map.get(config, "time", since)}
+      {_, true} ->
+        # failed and should crash (startup)
+        raise "Loading Statsig configs failed"
+    end
   end
 
   def flush(server \\ __MODULE__), do: GenServer.call(server, :flush)
