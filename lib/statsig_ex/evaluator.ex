@@ -1,10 +1,4 @@
 defmodule StatsigEx.Evaluator do
-  # here's what I sitll need to do:
-  # * add metadata headers (sdk version, etc) to API calls
-  # * possibly rejigger the http/api client stuff to possibly be more configurable
-  # * decide if I want to spin up a supervisor & the genserver automatically
-  #   or just continue to have apps call start_link themselves
-
   @unsupported ["ip_based"]
 
   defmodule Result do
