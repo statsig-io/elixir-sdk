@@ -11,12 +11,14 @@ defmodule StatsigEx do
       opts
       |> Keyword.put_new(:api_key, get_api_key_opt(opts))
       |> Keyword.put_new(:name, __MODULE__)
+      |> Keyword.put_new(:crash_on_startup, true)
 
     GenServer.start_link(__MODULE__, opts, name: Keyword.fetch!(opts, :name))
   end
 
   def init(opts) do
     server = Keyword.fetch!(opts, :name)
+    crash = Keyword.fetch!(opts, :crash_on_startup)
     :ets.new(ets_name(server), [:named_table])
 
     # so we can attempt to flush events before shutdown
@@ -32,8 +34,7 @@ defmodule StatsigEx do
       reload_interval: Keyword.get(opts, :reload_interval, @reload_interval)
     }
 
-    # crash if loading fails on startup
-    {:ok, last_sync} = reload_configs(state.api_key, state.last_sync, server, true)
+    {:ok, last_sync} = reload_configs(state.api_key, state.last_sync, server, crash)
 
     Process.send_after(self(), :reload, state.reload_interval)
     Process.send_after(self(), :flush, state.flush_interval)
