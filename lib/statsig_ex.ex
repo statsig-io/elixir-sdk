@@ -61,7 +61,7 @@ defmodule StatsigEx do
   def get_config(nil, _config, _server), do: {:error, :no_user}
 
   def get_config(user, config, server) do
-    user = Utils.get_user_with_env(user)
+    user = Utils.get_user_with_env(user, get_tier(server))
     result = StatsigEx.Evaluator.eval(user, config, :config, server)
     log_exposures(server, user, result.exposures, :config)
 
