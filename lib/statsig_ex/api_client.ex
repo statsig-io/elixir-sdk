@@ -1,15 +1,13 @@
 defmodule StatsigEx.APIClient do
+
   def download_config_specs(api_key, since_time \\ 0) do
     url = "https://api.statsigcdn.com/v1/download_config_specs/#{api_key}.json?sinceTime=#{since_time}"
 
-    with {:ok, resp} <-
-          Req.get(
-            url: url,
-            headers: headers(api_key)
-          ) do
-      Jason.decode(resp.body)
-    else
-      result -> result
+    case Req.get(url: url, headers: headers(api_key)) do
+      {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
+        {:ok, body}
+      {:ok, %Req.Response{status: status}} when status != 200 ->
+        {:error, :http_error, status}
     end
   end
 
