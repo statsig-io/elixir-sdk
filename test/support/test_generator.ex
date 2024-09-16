@@ -44,14 +44,6 @@ defmodule StatsigEx.TestGenerator do
 
               [_ | cal_sec] = result.exposures
 
-              # spit out the test details on failures
-              # if Enum.sort(unquote(Macro.escape(secondary))) != Enum.sort(cal_sec) do
-              #   IO.inspect(
-              #     {unquote(Macro.escape(user)), unquote(name), unquote(type),
-              #      unquote(Macro.escape(secondary))}
-              #   )
-              # end
-
               assert Enum.sort(unquote(Macro.escape(secondary))) == Enum.sort(cal_sec)
             end
           end

@@ -1,11 +1,5 @@
-use Mix.Config
+import Config
 
-config :statsig_ex,
+Config.config :statsig_ex,
   api_client: StatsigEx.TestAPIClient,
   env_tier: "test"
-
-# this is for configuring the statsig_erl lib
-config :statsig,
-  network: :test_network,
-  api_key: "123",
-  statsig_environment_tier: "test"

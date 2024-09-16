@@ -15,8 +15,7 @@ defmodule StatsigEx.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger],
-      applications: [:httpoison]
+      extra_applications: [:logger, :jason],
     ]
   end
 
@@ -30,7 +29,6 @@ defmodule StatsigEx.MixProject do
       {:httpoison, "~> 1.4"},
       {:jason, "~> 1.2"},
       {:ua_parser, "~> 1.8"},
-      {:statsig, path: "./statsig_erl", only: [:test]}
     ]
   end
 end
