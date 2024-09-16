@@ -1,11 +1,12 @@
 defmodule StatsigEx.APIClient do
-  def download_config_specs(api_key, since \\ 0) do
-    # don't crash here, let the calling process decide
+  def download_config_specs(api_key, since_time \\ 0) do
+    url = "https://api.statsigcdn.com/v1/download_config_specs/#{api_key}.json?sinceTime=#{since_time}"
+
     with {:ok, resp} <-
-           HTTPoison.get(
-             "https://statsigapi.net/v1/download_config_specs?sinceTime=#{since}",
-             headers(api_key)
-           ) do
+          Req.get(
+            url: url,
+            headers: headers(api_key)
+          ) do
       Jason.decode(resp.body)
     else
       result -> result
@@ -13,13 +14,13 @@ defmodule StatsigEx.APIClient do
   end
 
   def push_logs(api_key, logs) do
-    HTTPoison.post(
-      "https://statsigapi.net/v1/rgstr",
-      Jason.encode!(%{"events" => logs}),
-      headers(api_key)
+    Req.post(
+      url: "https://statsigapi.net/v1/rgstr",
+      json: %{"events" => logs},
+      headers: headers(api_key)
     )
     |> case do
-      {:ok, %{status_code: code}} when code < 300 -> {:ok, []}
+      {:ok, %{status: code}} when code < 300 -> {:ok, []}
       _ -> {:error, logs}
     end
   end

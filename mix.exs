@@ -26,7 +26,7 @@ defmodule StatsigEx.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:httpoison, "~> 1.4"},
+      {:req, "~> 0.5"},
       {:jason, "~> 1.2"},
       {:ua_parser, "~> 1.8"},
     ]
