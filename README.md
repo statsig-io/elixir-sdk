@@ -1,4 +1,4 @@
-# StatsigEx
+# Statsig
 
 ```shell
 $ mix test

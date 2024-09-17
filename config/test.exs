@@ -1,5 +1,5 @@
 import Config
 
-Config.config :statsig_ex,
-  api_client: StatsigEx.TestAPIClient,
+Config.config :statsig,
+  api_client: Statsig.TestAPIClient,
   env_tier: "test"

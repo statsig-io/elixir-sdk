@@ -1,7 +1,7 @@
-defmodule StatsigEx.ConsistencyTest do
+defmodule Statsig.ConsistencyTest do
   use ExUnit.Case
-  import StatsigEx.TestGenerator
-  alias StatsigEx.Evaluator
+  import Statsig.TestGenerator
+  alias Statsig.Evaluator
 
   "test/data/rulesets_e2e_expected_results.json"
   |> Path.expand()
@@ -13,7 +13,7 @@ defmodule StatsigEx.ConsistencyTest do
   @tag :skip
   test "one test" do
     result =
-      StatsigEx.Evaluator.eval(
+      Statsig.Evaluator.eval(
         %{
           "appVersion" => "1.3",
           "ip" => "1.0.0.0",

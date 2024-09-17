@@ -1,4 +1,4 @@
-defmodule StatsigEx.APIClient do
+defmodule Statsig.APIClient do
 
   def download_config_specs(api_key, since_time \\ 0) do
     url = "https://api.statsigcdn.com/v1/download_config_specs/#{api_key}.json?sinceTime=#{since_time}"

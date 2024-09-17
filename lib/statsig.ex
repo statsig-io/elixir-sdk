@@ -1,6 +1,6 @@
-defmodule StatsigEx do
+defmodule Statsig do
   use GenServer
-  alias StatsigEx.Utils
+  alias Statsig.Utils
 
   # default intervals
   @flush_interval 60_000
@@ -28,7 +28,7 @@ defmodule StatsigEx do
       api_key: get_api_key(Keyword.fetch!(opts, :api_key)),
       last_sync: 0,
       events: [],
-      tier: Keyword.get(opts, :tier, Application.get_env(:statsig_ex, :env_tier, nil)),
+      tier: Keyword.get(opts, :tier, Application.get_env(:statsig, :env_tier, nil)),
       prefix: server,
       flush_interval: Keyword.get(opts, :flush_interval, @flush_interval),
       reload_interval: Keyword.get(opts, :reload_interval, @reload_interval)
@@ -48,7 +48,7 @@ defmodule StatsigEx do
   def check_gate(user, gate, server) do
     user = Utils.get_user_with_env(user, get_tier(server))
 
-    result = StatsigEx.Evaluator.eval(user, gate, :gate, server)
+    result = Statsig.Evaluator.eval(user, gate, :gate, server)
     log_exposures(server, user, result.exposures, :gate)
 
     case result do
@@ -62,7 +62,7 @@ defmodule StatsigEx do
 
   def get_config(user, config, server) do
     user = Utils.get_user_with_env(user, get_tier(server))
-    result = StatsigEx.Evaluator.eval(user, config, :config, server)
+    result = Statsig.Evaluator.eval(user, config, :config, server)
     log_exposures(server, user, result.exposures, :config)
 
     # could probably hand back a Result struct
@@ -84,7 +84,7 @@ defmodule StatsigEx do
     do: :ets.match(ets_name(server), {{:"$1", type}, :_}) |> List.flatten()
 
   def ets_name(server) do
-    [server, :statsig_ex_store]
+    [server, :statsig_store]
     |> Enum.join("_")
     |> String.replace(".", "_")
     |> String.to_atom()
@@ -223,5 +223,5 @@ defmodule StatsigEx do
   defp save_configs([_head | tail], type, server), do: save_configs(tail, type, server)
 
   # should maybe accept this as part of initialization, too, so different pids can use different clients
-  defp api_client, do: Application.get_env(:statsig_ex, :api_client, StatsigEx.APIClient)
+  defp api_client, do: Application.get_env(:statsig, :api_client, Statsig.APIClient)
 end

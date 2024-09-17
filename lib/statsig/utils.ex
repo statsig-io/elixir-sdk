@@ -1,4 +1,4 @@
-defmodule StatsigEx.Utils do
+defmodule Statsig.Utils do
   def get_user_with_env(user, tier \\ nil)
 
   def get_user_with_env(%{"statsigEnvironment" => env} = user, _tier) when not is_nil(env),
@@ -9,7 +9,7 @@ defmodule StatsigEx.Utils do
   def sanitize_user(user), do: Map.delete(user, "privateAttributes")
 
   defp put_env(user, nil) do
-    case Application.get_env(:statsig_ex, :env_tier) do
+    case Application.get_env(:statsig, :env_tier) do
       nil -> user
       tier -> Map.put(user, "statsigEnvironment", %{"tier" => tier})
     end
