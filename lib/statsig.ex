@@ -76,6 +76,24 @@ defmodule Statsig do
   def get_experiment(user, exp), do: get_config(user, exp)
   def get_experiment(user, exp, server), do: get_config(user, exp, server)
 
+
+  def log_event(event, server \\ __MODULE__) do
+    GenServer.call(server, {:log, event})
+  end
+
+  def log_event(user, event_name, value, metadata, server \\ __MODULE__) do
+    user = Utils.get_user_with_env(user, get_tier(server))
+    event = %{
+      "eventName" => event_name,
+      "value" => value,
+      "metadata" => metadata,
+      "time" => DateTime.utc_now() |> DateTime.to_unix(:millisecond),
+      "user" => Utils.sanitize_user(user)
+    }
+    GenServer.call(server, {:log, event})
+  end
+
+
   def state(server \\ __MODULE__), do: GenServer.call(server, :state)
 
   def lookup(name, type, server \\ __MODULE__), do: :ets.lookup(ets_name(server), {name, type})
@@ -98,8 +116,12 @@ defmodule Statsig do
     {:reply, unsent, Map.put(state, :events, unsent)}
   end
 
-  def handle_call({:log, event}, _from, state),
-    do: {:reply, :ok, Map.put(state, :events, [event | state.events])}
+  def handle_call({:log, event}, _from, state) do
+    event_with_time = Map.update(event, "time", current_time(), fn existing_time ->
+      existing_time || current_time()
+    end)
+    {:reply, :ok, Map.put(state, :events, [event_with_time | state.events])}
+  end
 
   def handle_info(
         :reload,
@@ -139,6 +161,11 @@ defmodule Statsig do
       %{tier: t} -> t
       _ -> nil
     end
+  end
+
+
+  defp current_time do
+    DateTime.utc_now() |> DateTime.to_unix(:millisecond)
   end
 
   defp log_exposures(_server, _user, [], _type), do: :ok
