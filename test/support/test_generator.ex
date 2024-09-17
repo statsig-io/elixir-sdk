@@ -1,4 +1,8 @@
 defmodule StatsigEx.TestGenerator do
+  @unsupported_conditions ["ip_based"]
+  @unsupported_gates ["test_id_list", "test_not_in_id_list"]
+  @unsupported_configs ["test_exp_50_50_with_targeting_v2"]
+
   defmacro generate_all_tests(configs) do
     quote do
       Enum.flat_map(unquote(configs), fn %{
@@ -21,7 +25,7 @@ defmodule StatsigEx.TestGenerator do
             )
           ) do
             # skip if it's not supported (need to eventually support these, though)
-            if StatsigEx.PressureTest.all_conditions_supported?(
+            if StatsigEx.TestGenerator.all_conditions_supported?(
                  unquote(name),
                  unquote(type),
                  :test
@@ -54,5 +58,28 @@ defmodule StatsigEx.TestGenerator do
         Code.eval_quoted(test_case, [], __ENV__)
       end)
     end
+  end
+
+  def all_conditions_supported?(gate, :gate, _server)
+    when gate in @unsupported_gates,
+    do: false
+
+  def all_conditions_supported?(config, :config, _server)
+    when config in @unsupported_configs,
+    do: false
+
+  def all_conditions_supported?(gate, type, server) do
+  case StatsigEx.lookup(gate, type, server) do
+    [{_key, spec}] ->
+      Enum.reduce(Map.get(spec, "rules"), true, fn %{"conditions" => c}, acc ->
+        acc &&
+          Enum.reduce(c, true, fn %{"type" => type}, c_acc ->
+            c_acc && !Enum.any?(@unsupported_conditions, fn n -> n == type end)
+          end)
+      end)
+
+    _ ->
+      true
+  end
   end
 end
