@@ -116,8 +116,12 @@ defmodule Statsig do
     {:reply, unsent, Map.put(state, :events, unsent)}
   end
 
-  def handle_call({:log, event}, _from, state),
-    do: {:reply, :ok, Map.put(state, :events, [event | state.events])}
+  def handle_call({:log, event}, _from, state) do
+    event_with_time = Map.update(event, "time", current_time(), fn existing_time ->
+      existing_time || current_time()
+    end)
+    {:reply, :ok, Map.put(state, :events, [event_with_time | state.events])}
+  end
 
   def handle_info(
         :reload,
@@ -157,6 +161,11 @@ defmodule Statsig do
       %{tier: t} -> t
       _ -> nil
     end
+  end
+
+
+  defp current_time do
+    DateTime.utc_now() |> DateTime.to_unix(:millisecond)
   end
 
   defp log_exposures(_server, _user, [], _type), do: :ok
