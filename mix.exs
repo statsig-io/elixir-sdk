@@ -1,9 +1,9 @@
-defmodule StatsigEx.MixProject do
+defmodule Statsig.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :statsig_ex,
+      app: :statsig,
       version: "0.1.0",
       elixir: "~> 1.8",
       start_permanent: Mix.env() == :prod,

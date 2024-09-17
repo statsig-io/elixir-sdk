@@ -1,4 +1,4 @@
-defmodule StatsigEx.Evaluator do
+defmodule Statsig.Evaluator do
   @unsupported ["ip_based"]
 
   defmodule Result do
@@ -22,9 +22,9 @@ defmodule StatsigEx.Evaluator do
   def eval(user, name, type, server \\ nil) do
     # if server is nil, don't pass it along, let the central module to determine defaults
     if is_nil(server) do
-      StatsigEx.lookup(name, type)
+      Statsig.lookup(name, type)
     else
-      StatsigEx.lookup(name, type, server)
+      Statsig.lookup(name, type, server)
     end
     |> case do
       [{_key, spec}] ->

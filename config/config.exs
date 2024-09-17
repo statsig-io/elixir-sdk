@@ -10,11 +10,11 @@ import Config
 
 # You can configure your application as:
 #
-#     config :statsig_ex, key: :value
+#     config :statsig, key: :value
 #
 # and access this configuration in your application as:
 #
-#     Application.get_env(:statsig_ex, :key)
+#     Application.get_env(:statsig, :key)
 #
 # You can also configure a third-party app:
 #

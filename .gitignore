@@ -20,7 +20,7 @@ erl_crash.dump
 *.ez
 
 # Ignore package tarball (built via "mix hex.build").
-statsig_ex-*.tar
+statsig-*.tar
 *.beam
 
 .elixir_ls/
