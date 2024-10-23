@@ -1,6 +1,7 @@
 defmodule Statsig do
   use GenServer
   alias Statsig.Utils
+  require Logger
 
   # default intervals
   @flush_interval 60_000
@@ -9,39 +10,31 @@ defmodule Statsig do
   def start_link(opts \\ []) do
     opts =
       opts
-      |> Keyword.put_new(:api_key, get_api_key_opt(opts))
       |> Keyword.put_new(:name, __MODULE__)
-      |> Keyword.put_new(:crash_on_startup, true)
 
     GenServer.start_link(__MODULE__, opts, name: Keyword.fetch!(opts, :name))
   end
 
   def init(opts) do
     server = Keyword.fetch!(opts, :name)
-    crash = Keyword.fetch!(opts, :crash_on_startup)
+
     :ets.new(ets_name(server), [:named_table])
 
-    # so we can attempt to flush events before shutdown
     Process.flag(:trap_exit, true)
 
     state = %{
-      api_key: get_api_key(Keyword.fetch!(opts, :api_key)),
+      api_key: Application.get_env(:statsig, :api_key, nil),
       last_sync: 0,
       events: [],
       tier: Keyword.get(opts, :tier, Application.get_env(:statsig, :env_tier, nil)),
       prefix: server,
       flush_interval: Keyword.get(opts, :flush_interval, @flush_interval),
-      reload_interval: Keyword.get(opts, :reload_interval, @reload_interval)
+      reload_interval: Keyword.get(opts, :reload_interval, @reload_interval),
     }
-
-    {:ok, last_sync} = reload_configs(state.api_key, state.last_sync, server, crash)
-
-    Process.send_after(self(), :reload, state.reload_interval)
-    Process.send_after(self(), :flush, state.flush_interval)
-    {:ok, Map.put(state, :last_sync, last_sync)}
-    # end
+    {:ok, state}
   end
 
+  # TODO - PID should move to be the first argument
   def check_gate(user, gate, server \\ __MODULE__)
   def check_gate(nil, _gate, _server), do: {:error, :no_user}
 
@@ -56,6 +49,9 @@ defmodule Statsig do
       _ -> {:ok, result.result}
     end
   end
+  # Make a layer module
+  # The layer module can take a layer struct and return a value
+  # use atoms as keys
 
   def get_config(user, config, server \\ __MODULE__)
   def get_config(nil, _config, _server), do: {:error, :no_user}
@@ -65,10 +61,10 @@ defmodule Statsig do
     result = Statsig.Evaluator.eval(user, config, :config, server)
     log_exposures(server, user, result.exposures, :config)
 
-    # could probably hand back a Result struct
+    # TODO - could probably hand back a Result struct
     case result do
       %{reason: :not_found} -> {:error, :not_found}
-      # should this be {:ok, result}?
+      # TODO - this be {:ok, result}
       _ -> %{rule_id: Map.get(result.rule, "id"), value: result.value}
     end
   end
@@ -96,11 +92,14 @@ defmodule Statsig do
 
   def state(server \\ __MODULE__), do: GenServer.call(server, :state)
 
+  # TODO - pipeline this
   def lookup(name, type, server \\ __MODULE__), do: :ets.lookup(ets_name(server), {name, type})
 
+  # TODO - pipeline this
   def all(type, server \\ __MODULE__),
     do: :ets.match(ets_name(server), {{:"$1", type}, :_}) |> List.flatten()
 
+  # TODO - will break if the server is a PID
   def ets_name(server) do
     [server, :statsig_store]
     |> Enum.join("_")
@@ -123,6 +122,23 @@ defmodule Statsig do
     {:reply, :ok, Map.put(state, :events, [event_with_time | state.events])}
   end
 
+  def handle_info(:initialize, state) do
+    %{api_key: state_api_key, last_sync: time, prefix: server} = state
+    api_key = state_api_key || Application.get_env(:statsig, :api_key)
+
+    {:ok, last_sync} = reload_configs(api_key, time, server)
+
+    Process.send_after(self(), :reload, state.reload_interval)
+    Process.send_after(self(), :flush, state.flush_interval)
+
+    updated_state = state
+      |> Map.put(:api_key, api_key)
+      |> Map.put(:tier, Application.get_env(:statsig, :env_tier, nil))
+      |> Map.put(:last_sync, last_sync)
+
+    {:noreply, updated_state}
+  end
+
   def handle_info(
         :reload,
         %{api_key: key, last_sync: time, prefix: server, reload_interval: i} = state
@@ -138,23 +154,16 @@ defmodule Statsig do
     {:noreply, Map.put(state, :events, remaining)}
   end
 
+  def handle_info(msg, state) do
+    Logger.warning("Unexpected message in Statsig", msg)
+    {:noreply, state}
+  end
+
+  # TODO add a handle_info for the exit message
+  # {:EXIT, <pid>, reason} - if reason is :normal, do nothing
+
   def terminate(_reason, %{api_key: key, events: events}),
     do: flush_events(key, events)
-
-  defp get_api_key_opt(opts) do
-    opts
-    |> Keyword.fetch(:api_key)
-    |> case do
-      {:ok, k} ->
-        k
-
-      _ ->
-        case Application.get_env(:statsig, :api_key) do
-          nil -> {:system, "STATSIG_API_KEY"}
-          v -> v
-        end
-    end
-  end
 
   defp get_tier(server) do
     case state(server) do
@@ -202,22 +211,18 @@ defmodule Statsig do
     }
   end
 
-  defp reload_configs(api_key, since, server, crash \\ false) do
+  defp reload_configs(api_key, since, server) do
     # call Statsig API to get configs (eventually we can make the http client configurable)
-    case {api_client().download_config_specs(api_key, since), crash} do
-      {{:ok, config}, _} ->
+    case api_client().download_config_specs(api_key, since) do
+      {:ok, config} ->
         config |> Map.get("feature_gates", []) |> save_configs(:gate, server)
         config |> Map.get("dynamic_configs", []) |> save_configs(:config, server)
         # return the time of this last fetch
         {:ok, Map.get(config, "time", since)}
 
-      {_, false} ->
+      {:error, _reason} ->
         # failed, but shouldn't crash
         {:ok, nil}
-
-      {_, true} ->
-        # failed and should crash (startup)
-        raise "Loading Statsig configs failed"
     end
   end
 
@@ -235,9 +240,6 @@ defmodule Statsig do
     end)
     |> List.flatten()
   end
-
-  defp get_api_key({atom, var}) when atom in [:system, :env], do: System.get_env(var)
-  defp get_api_key(key), do: key
 
   defp save_configs([], _, _), do: :ok
 
