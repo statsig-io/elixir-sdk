@@ -83,7 +83,7 @@ defmodule Statsig do
       "eventName" => event_name,
       "value" => value,
       "metadata" => metadata,
-      "time" => DateTime.utc_now() |> DateTime.to_unix(:millisecond),
+      "time" => :os.system_time(:millisecond),
       "user" => Utils.sanitize_user(user)
     }
     GenServer.call(server, {:log, event})
@@ -122,33 +122,45 @@ defmodule Statsig do
     {:reply, :ok, Map.put(state, :events, [event_with_time | state.events])}
   end
 
-  def handle_info(:initialize, state) do
+  def handle_info(initialize_message, state) do
+    {options, state} = case initialize_message do
+      :initialize -> {%{}, state}
+      {:initialize, opts} -> {opts, Map.merge(state, opts)}
+    end
     %{api_key: state_api_key, last_sync: time, prefix: server} = state
     api_key = state_api_key || Application.get_env(:statsig, :api_key)
 
+    %{api_key: api_key, last_sync: time, prefix: server} = state
     {:ok, last_sync} = reload_configs(api_key, time, server)
 
-    Process.send_after(self(), :reload, state.reload_interval)
-    Process.send_after(self(), :flush, state.flush_interval)
+    reload_interval = options[:reload_interval] || state.reload_interval
+    flush_interval = options[:flush_interval] || state.flush_interval
+
+    Logger.info("reload_interval: #{inspect(reload_interval)}")
+    Logger.info("flush_interval: #{inspect(flush_interval)}")
+
+    Process.send_after(self(), :reload, reload_interval)
+    Process.send_after(self(), :flush, flush_interval)
 
     updated_state = state
+      |> Map.put(:last_sync, last_sync)
+      |> Map.put(:reload_interval, reload_interval)
+      |> Map.put(:flush_interval, flush_interval)
       |> Map.put(:api_key, api_key)
       |> Map.put(:tier, Application.get_env(:statsig, :env_tier, nil))
-      |> Map.put(:last_sync, last_sync)
 
     {:noreply, updated_state}
   end
 
-  def handle_info(
-        :reload,
-        %{api_key: key, last_sync: time, prefix: server, reload_interval: i} = state
-      ) do
+  def handle_info(:reload, state) do
+    %{api_key: key, last_sync: time, prefix: server, reload_interval: i} = state
     {:ok, sync_time} = reload_configs(key, time, server)
     Process.send_after(self(), :reload, i)
-    {:noreply, Map.put(state, :last_sync, sync_time || time)}
+    {:noreply, Map.put(state, :last_sync, sync_time)}
   end
 
-  def handle_info(:flush, %{api_key: key, events: events, flush_interval: i} = state) do
+  def handle_info(:flush, state) do
+    %{api_key: key, events: events, flush_interval: i} = state
     remaining = flush_events(key, events)
     Process.send_after(self(), :flush, i)
     {:noreply, Map.put(state, :events, remaining)}
@@ -212,17 +224,32 @@ defmodule Statsig do
   end
 
   defp reload_configs(api_key, since, server) do
-    # call Statsig API to get configs (eventually we can make the http client configurable)
+    Logger.info("reload_configs triggered")
     case api_client().download_config_specs(api_key, since) do
       {:ok, config} ->
-        config |> Map.get("feature_gates", []) |> save_configs(:gate, server)
-        config |> Map.get("dynamic_configs", []) |> save_configs(:config, server)
-        # return the time of this last fetch
-        {:ok, Map.get(config, "time", since)}
+        new_time = Map.get(config, "time", 0)
+        Logger.info("new_time: #{inspect(new_time)}")
+        Logger.info("since_time: #{inspect(since)}")
 
-      {:error, _reason} ->
-        # failed, but shouldn't crash
-        {:ok, nil}
+        if is_number(new_time) and new_time > since do
+          config |> Map.get("feature_gates", []) |> save_configs(:gate, server)
+          config |> Map.get("dynamic_configs", []) |> save_configs(:config, server)
+          {:ok, new_time}
+        else
+          {:ok, since}
+        end
+
+      {:error, :unauthorized} ->
+        Logger.error("Unauthorized error when downloading config specs")
+        {:error, :unauthorized}
+
+      {:error, :unexpected_error, error} ->
+        Logger.error("Unexpected error when downloading config specs")
+        {:error, :unexpected_error}
+
+      {:error, reason} ->
+        Logger.error("Error when downloading config specs: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
