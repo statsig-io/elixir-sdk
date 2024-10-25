@@ -30,6 +30,8 @@ defmodule Statsig do
       prefix: server,
       flush_interval: Keyword.get(opts, :flush_interval, @flush_interval),
       reload_interval: Keyword.get(opts, :reload_interval, @reload_interval),
+      reload_timer: nil,
+      flush_timer: nil
     }
     {:ok, state}
   end
@@ -122,6 +124,14 @@ defmodule Statsig do
     {:reply, :ok, Map.put(state, :events, [event_with_time | state.events])}
   end
 
+  def handle_call(:shutdown, _from, state) do
+    handle_flush(state)
+    if state.reload_timer, do: Process.cancel_timer(state.reload_timer)
+    if state.flush_timer, do: Process.cancel_timer(state.flush_timer)
+
+    {:stop, :normal, :ok, state}
+  end
+
   # TODO add a handle_info for the exit message
   # {:EXIT, <pid>, reason} - if reason is :normal, do nothing
   def handle_info(message, state) do
@@ -163,8 +173,8 @@ defmodule Statsig do
     Logger.info("reload_interval: #{inspect(reload_interval)}")
     Logger.info("flush_interval: #{inspect(flush_interval)}")
 
-    Process.send_after(self(), :reload, reload_interval)
-    Process.send_after(self(), :flush, flush_interval)
+    reload_timer = Process.send_after(self(), :reload, reload_interval)
+    flush_timer = Process.send_after(self(), :flush, flush_interval)
 
     updated_state = state
       |> Map.put(:last_sync, last_sync)
@@ -172,6 +182,8 @@ defmodule Statsig do
       |> Map.put(:flush_interval, flush_interval)
       |> Map.put(:api_key, api_key)
       |> Map.put(:tier, Application.get_env(:statsig, :env_tier, nil))
+      |> Map.put(:reload_timer, reload_timer)
+      |> Map.put(:flush_timer, flush_timer)
 
     {:noreply, updated_state}
   end
@@ -180,32 +192,34 @@ defmodule Statsig do
     %{api_key: api_key, last_sync: time, prefix: server, reload_interval: reload_interval} = state
     case reload_configs(api_key, time, server) do
       {:ok, last_sync} ->
-        Process.send_after(self(), :reload, reload_interval)
+        reload_timer = Process.send_after(self(), :reload, reload_interval)
         updated_state = Map.put(state, :last_sync, last_sync)
+        |> Map.put(:reload_timer, reload_timer)
         {:noreply, updated_state}
 
       {:error, :unauthorized} ->
         Logger.error("Unauthorized error. Please check your API key.")
-        Process.send_after(self(), :reload, reload_interval)
-        {:noreply, state}
+        reload_timer = Process.send_after(self(), :reload, reload_interval)
+        {:noreply, Map.put(state, :reload_timer, reload_timer)}
 
       {:error, _reason} ->
         Logger.error("Failed to reload configs. Will retry in #{reload_interval}ms.")
-        Process.send_after(self(), :reload, reload_interval)
-        {:noreply, state}
+        reload_timer = Process.send_after(self(), :reload, reload_interval)
+        {:noreply, Map.put(state, :reload_timer, reload_timer)}
     end
   end
 
   defp handle_flush(state) do
     %{api_key: key, events: events, flush_interval: i} = state
     remaining = flush_events(key, events)
-    Process.send_after(self(), :flush, i)
-    {:noreply, Map.put(state, :events, remaining)}
+    state = Map.put(state, :events, remaining)
+    flush_timer = Process.send_after(self(), :flush, state.flush_interval)
+    {:noreply, state |> Map.put(:flush_timer, flush_timer)}
   end
 
-
-  def terminate(_reason, %{api_key: key, events: events}),
-    do: flush_events(key, events)
+  def terminate(_reason, %{api_key: key, events: events}) do
+    Logger.info("for now, do nothing on terminate")
+  end
 
   defp get_tier(server) do
     case state(server) do
@@ -284,18 +298,19 @@ defmodule Statsig do
   end
 
   def flush(server \\ __MODULE__), do: GenServer.call(server, :flush)
+  def shutdown(server \\ __MODULE__), do: GenServer.call(server, :shutdown)
 
   defp flush_events(_key, []), do: []
 
   defp flush_events(key, events) do
     # send in batches; keep any that fail
-    events
+    unsent = events
     |> Enum.chunk_every(500)
     |> Enum.reduce([], fn chunk, unsent ->
-      {_, failed} = api_client().push_logs(key, chunk)
-      [failed | unsent]
+      {result, failed} = api_client().push_logs(key, chunk)
+      failed ++ unsent
     end)
-    |> List.flatten()
+    unsent
   end
 
   defp save_configs([], _, _), do: :ok
