@@ -122,11 +122,35 @@ defmodule Statsig do
     {:reply, :ok, Map.put(state, :events, [event_with_time | state.events])}
   end
 
-  def handle_info(initialize_message, state) do
-    {options, state} = case initialize_message do
-      :initialize -> {%{}, state}
-      {:initialize, opts} -> {opts, Map.merge(state, opts)}
+  # TODO add a handle_info for the exit message
+  # {:EXIT, <pid>, reason} - if reason is :normal, do nothing
+  def handle_info(message, state) do
+    case message do
+      :initialize ->
+        handle_initialize(%{}, state)
+
+      {:initialize, options} ->
+        handle_initialize(options, Map.merge(state, options))
+
+      :reload ->
+        handle_reload(state)
+
+      :flush ->
+        handle_flush(state)
+
+      _ ->
+        Logger.warn("Unhandled message in Statsig: #{inspect(message)}")
+        {:noreply, state}
     end
+  end
+
+  def handle_initialize(options, state) do
+    Logger.error("initialize_options: #{inspect(options)}")
+
+    if options[:api_url] do
+      Application.put_env(:statsig, :api_url, options[:api_url])
+    end
+
     %{api_key: state_api_key, last_sync: time, prefix: server} = state
     api_key = state_api_key || Application.get_env(:statsig, :api_key)
 
@@ -152,27 +176,33 @@ defmodule Statsig do
     {:noreply, updated_state}
   end
 
-  def handle_info(:reload, state) do
-    %{api_key: key, last_sync: time, prefix: server, reload_interval: i} = state
-    {:ok, sync_time} = reload_configs(key, time, server)
-    Process.send_after(self(), :reload, i)
-    {:noreply, Map.put(state, :last_sync, sync_time)}
+  defp handle_reload(state) do
+    %{api_key: api_key, last_sync: time, prefix: server, reload_interval: reload_interval} = state
+    case reload_configs(api_key, time, server) do
+      {:ok, last_sync} ->
+        Process.send_after(self(), :reload, reload_interval)
+        updated_state = Map.put(state, :last_sync, last_sync)
+        {:noreply, updated_state}
+
+      {:error, :unauthorized} ->
+        Logger.error("Unauthorized error. Please check your API key.")
+        Process.send_after(self(), :reload, reload_interval)
+        {:noreply, state}
+
+      {:error, _reason} ->
+        Logger.error("Failed to reload configs. Will retry in #{reload_interval}ms.")
+        Process.send_after(self(), :reload, reload_interval)
+        {:noreply, state}
+    end
   end
 
-  def handle_info(:flush, state) do
+  defp handle_flush(state) do
     %{api_key: key, events: events, flush_interval: i} = state
     remaining = flush_events(key, events)
     Process.send_after(self(), :flush, i)
     {:noreply, Map.put(state, :events, remaining)}
   end
 
-  def handle_info(msg, state) do
-    Logger.warning("Unexpected message in Statsig", msg)
-    {:noreply, state}
-  end
-
-  # TODO add a handle_info for the exit message
-  # {:EXIT, <pid>, reason} - if reason is :normal, do nothing
 
   def terminate(_reason, %{api_key: key, events: events}),
     do: flush_events(key, events)
