@@ -15,6 +15,9 @@ defmodule Statsig.APIClient do
       {:ok, %Req.Response{status: status, body: body}} ->
         Logger.error("HTTP error: status #{status}, body: #{inspect(body)}")
         {:error, :http_error, status}
+      {:error, :unexpected_error, error} ->
+        Logger.error("Unexpected error: #{inspect(error)}")
+        {:error, :unexpected_error, error}
       {:error, error} ->
         Logger.error("Unexpected error: #{inspect(error)}")
         {:error, :unexpected_error, error}
@@ -46,7 +49,7 @@ defmodule Statsig.APIClient do
       {"Content-Type", "application/json"},
       {"STATSIG-SDK-VERSION", "0.0.1"},
       {"STATSIG-SDK-TYPE", "elixir-server"},
-      {"STATSIG-CLIENT-TIME", DateTime.utc_now() |> DateTime.to_unix(:millisecond)}
+      {"STATSIG-CLIENT-TIME", :os.system_time(:millisecond)}
     ]
   end
 
