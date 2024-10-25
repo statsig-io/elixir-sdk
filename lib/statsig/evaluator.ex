@@ -12,23 +12,18 @@ defmodule Statsig.Evaluator do
   end
 
   defmodule Context do
-    defstruct spec: %{}, server: nil
+    defstruct spec: %{}
   end
 
   # this doesn't add the top-level exposure properly
   def eval(user, spec) when is_map(spec),
     do: eval_and_add_exposure(user, spec, %Context{spec: Map.get(spec, "name")})
 
-  def eval(user, name, type, server \\ nil) do
-    # if server is nil, don't pass it along, let the central module to determine defaults
-    if is_nil(server) do
-      Statsig.lookup(name, type)
-    else
-      Statsig.lookup(name, type, server)
-    end
+  def eval(user, name, type) do
+    Statsig.lookup(name, type)
     |> case do
       [{_key, spec}] ->
-        eval_and_add_exposure(user, %Context{spec: spec, server: server}, name)
+        eval_and_add_exposure(user, %Context{spec: spec}, name)
 
       _other ->
         eval_and_add_exposure(user, nil, name)
@@ -154,7 +149,7 @@ defmodule Statsig.Evaluator do
          acc
        ) do
     result =
-      case eval(user, gate, :gate, ctx.server) do
+      case eval(user, gate, :gate) do
         %{result: true} = result ->
           %Result{
             result
@@ -176,7 +171,7 @@ defmodule Statsig.Evaluator do
          ctx,
          acc
        ) do
-    result = eval(user, gate, :gate, ctx.server)
+    result = eval(user, gate, :gate)
 
     returned_rule =
       if result.result,

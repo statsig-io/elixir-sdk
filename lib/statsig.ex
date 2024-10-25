@@ -7,6 +7,9 @@ defmodule Statsig do
   @flush_interval 60_000
   @reload_interval 60_000
 
+  @config_store :statsig_store
+  @log_queue :statsig_log_queue
+
   def start_link(opts \\ []) do
     opts =
       opts
@@ -18,7 +21,8 @@ defmodule Statsig do
   def init(opts) do
     server = Keyword.fetch!(opts, :name)
 
-    :ets.new(ets_name(server), [:named_table])
+    :ets.new(@config_store, [:named_table, :public, :set])
+    :ets.new(@log_queue, [:named_table, :public, :ordered_set])
 
     Process.flag(:trap_exit, true)
 
@@ -26,7 +30,6 @@ defmodule Statsig do
       api_key: Application.get_env(:statsig, :api_key, nil),
       last_sync: 0,
       events: [],
-      tier: Keyword.get(opts, :tier, Application.get_env(:statsig, :env_tier, nil)),
       prefix: server,
       flush_interval: Keyword.get(opts, :flush_interval, @flush_interval),
       reload_interval: Keyword.get(opts, :reload_interval, @reload_interval),
@@ -37,14 +40,14 @@ defmodule Statsig do
   end
 
   # TODO - PID should move to be the first argument
-  def check_gate(user, gate, server \\ __MODULE__)
-  def check_gate(nil, _gate, _server), do: {:error, :no_user}
+  def check_gate(user, gate)
+  def check_gate(nil, _gate), do: {:error, :no_user}
 
-  def check_gate(user, gate, server) do
-    user = Utils.get_user_with_env(user, get_tier(server))
+  def check_gate(user, gate) do
+    user = Utils.get_user_with_env(user, get_tier())
 
-    result = Statsig.Evaluator.eval(user, gate, :gate, server)
-    log_exposures(server, user, result.exposures, :gate)
+    result = Statsig.Evaluator.eval(user, gate, :gate)
+    log_exposures(user, result.exposures, :gate)
 
     case result do
       %{reason: :not_found} -> {:error, :not_found}
@@ -55,13 +58,13 @@ defmodule Statsig do
   # The layer module can take a layer struct and return a value
   # use atoms as keys
 
-  def get_config(user, config, server \\ __MODULE__)
-  def get_config(nil, _config, _server), do: {:error, :no_user}
+  def get_config(user, config)
+  def get_config(nil, _config), do: {:error, :no_user}
 
-  def get_config(user, config, server) do
-    user = Utils.get_user_with_env(user, get_tier(server))
-    result = Statsig.Evaluator.eval(user, config, :config, server)
-    log_exposures(server, user, result.exposures, :config)
+  def get_config(user, config) do
+    user = Utils.get_user_with_env(user, get_tier())
+    result = Statsig.Evaluator.eval(user, config, :config)
+    log_exposures(user, result.exposures, :config)
 
     # TODO - could probably hand back a Result struct
     case result do
@@ -72,15 +75,21 @@ defmodule Statsig do
   end
 
   def get_experiment(user, exp), do: get_config(user, exp)
-  def get_experiment(user, exp, server), do: get_config(user, exp, server)
+  def get_experiment(user, exp), do: get_config(user, exp)
 
 
-  def log_event(event, server \\ __MODULE__) do
-    GenServer.call(server, {:log, event})
+  def log_event(event) do
+    insert_log(event)
+    :ok
   end
 
-  def log_event(user, event_name, value, metadata, server \\ __MODULE__) do
-    user = Utils.get_user_with_env(user, get_tier(server))
+  defp insert_log(event) do
+    timestamp = :os.system_time(:nanosecond)
+    :ets.insert(@log_queue, {timestamp, event})
+  end
+
+  def log_event(user, event_name, value, metadata) do
+    user = Utils.get_user_with_env(user, get_tier())
     event = %{
       "eventName" => event_name,
       "value" => value,
@@ -88,33 +97,30 @@ defmodule Statsig do
       "time" => :os.system_time(:millisecond),
       "user" => Utils.sanitize_user(user)
     }
-    GenServer.call(server, {:log, event})
+    insert_log(event)
+    :ok
   end
 
 
   def state(server \\ __MODULE__), do: GenServer.call(server, :state)
 
-  # TODO - pipeline this
-  def lookup(name, type, server \\ __MODULE__), do: :ets.lookup(ets_name(server), {name, type})
+  def lookup(name, type) do
+    @config_store
+    |> :ets.lookup({name, type})
+  end
 
-  # TODO - pipeline this
-  def all(type, server \\ __MODULE__),
-    do: :ets.match(ets_name(server), {{:"$1", type}, :_}) |> List.flatten()
-
-  # TODO - will break if the server is a PID
-  def ets_name(server) do
-    [server, :statsig_store]
-    |> Enum.join("_")
-    |> String.replace(".", "_")
-    |> String.to_atom()
+  def all(type) do
+    @config_store
+    |> :ets.match({{:"$1", type}, :_})
+    |> List.flatten()
   end
 
   # for debugging
   def handle_call(:state, _from, state), do: {:reply, state, state}
 
-  def handle_call(:flush, _from, %{api_key: key, events: events} = state) do
-    unsent = flush_events(key, events)
-    {:reply, unsent, Map.put(state, :events, unsent)}
+  def handle_call(:flush, _from, %{api_key: key} = state) do
+    flush_events(key)
+    {:reply, state, state}
   end
 
   def handle_call({:log, event}, _from, state) do
@@ -161,11 +167,9 @@ defmodule Statsig do
       Application.put_env(:statsig, :api_url, options[:api_url])
     end
 
-    %{api_key: state_api_key, last_sync: time, prefix: server} = state
+    %{api_key: state_api_key, last_sync: time} = state
     api_key = state_api_key || Application.get_env(:statsig, :api_key)
-
-    %{api_key: api_key, last_sync: time, prefix: server} = state
-    {:ok, last_sync} = reload_configs(api_key, time, server)
+    {:ok, last_sync} = reload_configs(api_key, time)
 
     reload_interval = options[:reload_interval] || state.reload_interval
     flush_interval = options[:flush_interval] || state.flush_interval
@@ -181,7 +185,6 @@ defmodule Statsig do
       |> Map.put(:reload_interval, reload_interval)
       |> Map.put(:flush_interval, flush_interval)
       |> Map.put(:api_key, api_key)
-      |> Map.put(:tier, Application.get_env(:statsig, :env_tier, nil))
       |> Map.put(:reload_timer, reload_timer)
       |> Map.put(:flush_timer, flush_timer)
 
@@ -189,8 +192,8 @@ defmodule Statsig do
   end
 
   defp handle_reload(state) do
-    %{api_key: api_key, last_sync: time, prefix: server, reload_interval: reload_interval} = state
-    case reload_configs(api_key, time, server) do
+    %{api_key: api_key, last_sync: time, reload_interval: reload_interval} = state
+    case reload_configs(api_key, time) do
       {:ok, last_sync} ->
         reload_timer = Process.send_after(self(), :reload, reload_interval)
         updated_state = Map.put(state, :last_sync, last_sync)
@@ -210,9 +213,7 @@ defmodule Statsig do
   end
 
   defp handle_flush(state) do
-    %{api_key: key, events: events, flush_interval: i} = state
-    remaining = flush_events(key, events)
-    state = Map.put(state, :events, remaining)
+    flush_events(state.api_key)
     flush_timer = Process.send_after(self(), :flush, state.flush_interval)
     {:noreply, state |> Map.put(:flush_timer, flush_timer)}
   end
@@ -221,11 +222,8 @@ defmodule Statsig do
     Logger.info("for now, do nothing on terminate")
   end
 
-  defp get_tier(server) do
-    case state(server) do
-      %{tier: t} -> t
-      _ -> nil
-    end
+  defp get_tier() do
+    Application.get_env(:statsig, :env_tier, nil)
   end
 
 
@@ -233,9 +231,9 @@ defmodule Statsig do
     DateTime.utc_now() |> DateTime.to_unix(:millisecond)
   end
 
-  defp log_exposures(_server, _user, [], _type), do: :ok
+  defp log_exposures(_user, [], _type), do: :ok
 
-  defp log_exposures(server, user, [%{"gate" => c, "ruleID" => r} | secondary], :config) do
+  defp log_exposures(user, [%{"gate" => c, "ruleID" => r} | secondary], :config) do
     primary = %{
       "config" => c,
       "ruleID" => r
@@ -245,15 +243,15 @@ defmodule Statsig do
       base_event(user, secondary, :config)
       |> Map.put("metadata", primary)
 
-    GenServer.call(server, {:log, event})
+    insert_log(event)
   end
 
-  defp log_exposures(server, user, [primary | secondary], type) do
+  defp log_exposures(user, [primary | secondary], type) do
     event =
       base_event(user, secondary, type)
       |> Map.put("metadata", primary)
 
-    GenServer.call(server, {:log, event})
+      insert_log(event)
   end
 
   defp base_event(user, secondary, type) do
@@ -267,7 +265,7 @@ defmodule Statsig do
     }
   end
 
-  defp reload_configs(api_key, since, server) do
+  defp reload_configs(api_key, since) do
     Logger.info("reload_configs triggered")
     case api_client().download_config_specs(api_key, since) do
       {:ok, config} ->
@@ -276,8 +274,8 @@ defmodule Statsig do
         Logger.info("since_time: #{inspect(since)}")
 
         if is_number(new_time) and new_time > since do
-          config |> Map.get("feature_gates", []) |> save_configs(:gate, server)
-          config |> Map.get("dynamic_configs", []) |> save_configs(:config, server)
+          config |> Map.get("feature_gates", []) |> save_configs(:gate)
+          config |> Map.get("dynamic_configs", []) |> save_configs(:config)
           {:ok, new_time}
         else
           {:ok, since}
@@ -298,30 +296,58 @@ defmodule Statsig do
   end
 
   def flush(server \\ __MODULE__), do: GenServer.call(server, :flush)
-  def shutdown(server \\ __MODULE__), do: GenServer.call(server, :shutdown)
+  def shutdown(server \\ __MODULE__) do
+    try do
+      GenServer.call(server, :shutdown)
+      :ets.delete_all_objects(@config_store)
+      :ets.delete_all_objects(@log_queue)
+    catch
+      :exit, {:timeout, _} ->
+        :ets.delete_all_objects(@config_store)
+        :ets.delete_all_objects(@log_queue)
+        Logger.warn("Statsig shutdown timed out")
+        :ok
+    end
+  end
 
-  defp flush_events(_key, []), do: []
+  defp flush_events(key) do
+    case :ets.select(@log_queue, [{:_, [], [:'$_']}], 1000) do
+      {[], :'$end_of_table'} ->
+        []  # No events to process
+      {events, continue} ->
+        events = Enum.map(events, fn {_timestamp, event} -> event end)
 
-  defp flush_events(key, events) do
-    # send in batches; keep any that fail
-    unsent = events
-    |> Enum.chunk_every(500)
-    |> Enum.reduce([], fn chunk, unsent ->
-      {result, failed} = api_client().push_logs(key, chunk)
-      failed ++ unsent
-    end)
-    unsent
+        unsent = events
+        |> Enum.chunk_every(500)
+        |> Enum.reduce([], fn chunk, unsent ->
+          {_result, failed} = api_client().push_logs(key, chunk)
+          failed ++ unsent
+        end)
+
+        sent_events = events -- unsent
+        Enum.each(sent_events, fn event ->
+          case :ets.match_object(@log_queue, {:_, event}) do
+            [{timestamp, _}] -> :ets.delete(@log_queue, timestamp)
+            _ -> :ok  # Event not found, possibly already deleted
+          end
+        end)
+
+        case continue do
+          :'$end_of_table' -> unsent
+          _ -> unsent ++ flush_events(key)
+        end
+    end
   end
 
   defp save_configs([], _, _), do: :ok
 
-  defp save_configs([%{"name" => name} = head | tail], type, server) when is_binary(name) do
-    :ets.insert(ets_name(server), {{name, type}, head})
-    save_configs(tail, type, server)
+  defp save_configs([%{"name" => name} = head | tail], type) when is_binary(name) do
+    :ets.insert(@config_store, {{name, type}, head})
+    save_configs(tail, type)
   end
 
   # config has no name, so skip it
-  defp save_configs([_head | tail], type, server), do: save_configs(tail, type, server)
+  defp save_configs([_head | tail], type), do: save_configs(tail, type)
 
   # should maybe accept this as part of initialization, too, so different pids can use different clients
   defp api_client, do: Application.get_env(:statsig, :api_client, Statsig.APIClient)
