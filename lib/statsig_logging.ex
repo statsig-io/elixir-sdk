@@ -3,7 +3,6 @@ defmodule Statsig.Logging do
   require Logger
 
   @type state :: %{
-    api_key: String.t() | nil,
     flush_interval: integer() | nil,
     events: list(),
     flush_timer: reference() | nil
@@ -11,15 +10,14 @@ defmodule Statsig.Logging do
 
   def start_link(_) do
     GenServer.start_link(__MODULE__, %{
-      api_key: nil,
-      flush_interval: nil,
+      flush_interval: 60_000,
       events: [],
       flush_timer: nil,
     }, name: __MODULE__)
   end
 
-  def initialize(options) when is_map(options) do
-    GenServer.call(__MODULE__, {:initialize, options})
+  def initialize(flush_interval) do
+    GenServer.call(__MODULE__, {:initialize, flush_interval})
   end
 
   def shutdown do
@@ -55,16 +53,11 @@ defmodule Statsig.Logging do
 
 
   @impl true
-  def handle_call({:initialize, options}, _from, state) do
-    Logger.debug("Initializing Logging with options: #{inspect(options)}")
-
-
-    new_state = state
-      |> Map.put(:api_key, options.api_key)
-      |> maybe_update_flush_interval(options)
-
-    if state.flush_timer != nil do
-      Process.cancel_timer(state.flush_timer)
+  def handle_call({:initialize, flush_interval}, _from, state) do
+    new_state = if is_number(flush_interval) do
+      Map.put(state, :flush_interval, flush_interval)
+    else
+      state
     end
 
     new_state = if new_state.flush_interval != nil do
@@ -104,10 +97,18 @@ defmodule Statsig.Logging do
     {:noreply, new_state}
   end
 
-  defp flush_events(%{api_key: nil} = state), do: state
+  @impl true
+  def terminate(reason, state) do
+    if length(state.events) > 0 do
+      flush_events(state)
+    end
+
+    :ok
+  end
+
   defp flush_events(%{events: []} = state), do: state
   defp flush_events(state) do
-    case api_client().push_logs(state.api_key, state.events) do
+    case api_client().push_logs(state.events) do
       {:ok, _} ->
         %{state | events: []}
       {:error, reason} ->
@@ -116,22 +117,7 @@ defmodule Statsig.Logging do
     end
   end
 
-  defp maybe_update_flush_interval(state, %{flush_interval: interval}) when is_number(interval), do: Map.put(state, :flush_interval, interval)
-  defp maybe_update_flush_interval(state, _), do: state
 
   defp api_client, do: Application.get_env(:statsig, :api_client, Statsig.APIClient)
-
-  @impl true
-  def terminate(reason, state) do
-    Logger.error("Statsig.Logging terminating. Reason: #{inspect(reason)}, State: #{inspect(state)}")
-
-    # Attempt to flush any remaining events before shutdown
-    if length(state.events) > 0 do
-      Logger.info("Flushing #{length(state.events)} events before shutdown")
-      flush_events(state)
-    end
-
-    :ok
-  end
 
 end

@@ -12,7 +12,6 @@ defmodule Statsig.Application do
   end
 
   def stop(_state) do
-    Logger.info("Stopping Statsig application")
     :ok
   end
 end

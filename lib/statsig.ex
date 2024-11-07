@@ -1,17 +1,14 @@
 defmodule Statsig do
   @type options :: %{
-    api_key: String.t(),
-    api_url: String.t() | nil,
-    env_tier: String.t() | nil,
     reload_interval: integer() | nil,
     flush_interval: integer() | nil
   }
-
   def initialize(options) do
-    # Initialize configs
-    configs_result = Statsig.Configs.initialize(options)
-    # Initialize logging
-    logging_result = Statsig.Logging.initialize(options)
+    reload_interval = Map.get(options, :reload_interval)
+    flush_interval = Map.get(options, :flush_interval)
+
+    configs_result = Statsig.Configs.initialize(reload_interval)
+    logging_result = Statsig.Logging.initialize(flush_interval)
 
     case {configs_result, logging_result} do
       {:ok, :ok} ->
@@ -28,7 +25,7 @@ defmodule Statsig do
     log_exposures(user, result.exposures, :gate)
 
     case result do
-      %{reason: :not_found} -> {:ok, result.result}
+      %{reason: :not_found} -> {:error, :not_found}
       _ -> {:ok, result.result}
     end
   end

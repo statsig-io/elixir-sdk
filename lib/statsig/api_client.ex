@@ -3,15 +3,11 @@ defmodule Statsig.APIClient do
   @default_logging_api_url "https://statsigapi.net/v1/"
   @default_config_specs_api_url "https://api.statsigcdn.com/v1/"
 
-  def download_config_specs(api_key, since_time \\ 0) do
+  def download_config_specs(since_time \\ 0) do
     base_url = get_api_url(@default_config_specs_api_url)
-    url = "#{base_url}download_config_specs/#{api_key}.json?sinceTime=#{since_time}"
+    url = "#{base_url}download_config_specs/#{get_api_key()}.json?sinceTime=#{since_time}"
 
-    # Add debug logs for request details
-    Logger.error("Making request to: #{url}")
-    Logger.error("Request headers: #{inspect(headers(api_key))}")
-
-    result = Req.get(url: url, headers: headers(api_key))
+    result = Req.get(url: url)
 
     case result do
       {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
@@ -22,7 +18,6 @@ defmodule Statsig.APIClient do
           {:error, :invalid_response_format, body}
         end
       {:ok, %Req.Response{status: status, body: body}} ->
-        # Logger.error("Full response: status=#{status}, body=#{inspect(body)}")
         Logger.error("HTTP error: status #{status}, body: #{inspect(body)}")
         {:error, :http_error, status}
       {:error, :unexpected_error, error} ->
@@ -34,22 +29,22 @@ defmodule Statsig.APIClient do
     end
   end
 
-  def push_logs(api_key, logs) do
+  def push_logs(logs) do
     base_url = get_api_url(@default_logging_api_url)
     url = "#{base_url}rgstr"
 
-    # Add debug logs for request details
-    Logger.error("Making log push request to: #{url}")
-    Logger.error("Request payload: #{inspect(logs)}")
-    Logger.error("Request headers: #{inspect(headers(api_key))}")
     result = Req.post(
       url: url,
       json: %{"events" => logs},
-      headers: headers(api_key)
+      headers: headers(get_api_key())
     ) |> case do
       {:ok, %{status: code}} when code < 300 -> {:ok, []}
       _ -> {:error, logs}
     end
+  end
+
+  defp get_api_key() do
+    Application.get_env(:statsig, :api_key)
   end
 
   defp get_api_url(default_url) do
