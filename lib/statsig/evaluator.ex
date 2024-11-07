@@ -19,16 +19,11 @@ defmodule Statsig.Evaluator do
   def eval(user, spec) when is_map(spec),
     do: eval_and_add_exposure(user, spec, %Context{spec: Map.get(spec, "name")})
 
-  def eval(user, name, type, server \\ nil) do
-    # if server is nil, don't pass it along, let the central module to determine defaults
-    if is_nil(server) do
-      Statsig.lookup(name, type)
-    else
-      Statsig.lookup(name, type, server)
-    end
+  def eval(user, name, type) do
+    Statsig.Configs.lookup(name, type)
     |> case do
       [{_key, spec}] ->
-        eval_and_add_exposure(user, %Context{spec: spec, server: server}, name)
+        eval_and_add_exposure(user, %Context{spec: spec}, name)
 
       _other ->
         eval_and_add_exposure(user, nil, name)
@@ -37,6 +32,7 @@ defmodule Statsig.Evaluator do
 
   defp eval_and_add_exposure(_user, nil, name),
     do: %Result{
+      result: false,
       rule: %{"id" => "Unrecognized"},
       reason: :not_found,
       exposures: [
@@ -154,7 +150,7 @@ defmodule Statsig.Evaluator do
          acc
        ) do
     result =
-      case eval(user, gate, :gate, ctx.server) do
+      case eval(user, gate, :gate) do
         %{result: true} = result ->
           %Result{
             result
@@ -176,7 +172,7 @@ defmodule Statsig.Evaluator do
          ctx,
          acc
        ) do
-    result = eval(user, gate, :gate, ctx.server)
+    result = eval(user, gate, :gate)
 
     returned_rule =
       if result.result,

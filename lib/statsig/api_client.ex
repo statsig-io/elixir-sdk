@@ -7,12 +7,22 @@ defmodule Statsig.APIClient do
     base_url = get_api_url(@default_config_specs_api_url)
     url = "#{base_url}download_config_specs/#{api_key}.json?sinceTime=#{since_time}"
 
+    # Add debug logs for request details
+    Logger.error("Making request to: #{url}")
+    Logger.error("Request headers: #{inspect(headers(api_key))}")
+
     result = Req.get(url: url, headers: headers(api_key))
 
     case result do
       {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
-        {:ok, body}
+        if is_map(body) do
+          {:ok, body}
+        else
+          Logger.error("Invalid response format, expected map got: #{inspect(body)}")
+          {:error, :invalid_response_format, body}
+        end
       {:ok, %Req.Response{status: status, body: body}} ->
+        # Logger.error("Full response: status=#{status}, body=#{inspect(body)}")
         Logger.error("HTTP error: status #{status}, body: #{inspect(body)}")
         {:error, :http_error, status}
       {:error, :unexpected_error, error} ->
@@ -27,6 +37,11 @@ defmodule Statsig.APIClient do
   def push_logs(api_key, logs) do
     base_url = get_api_url(@default_logging_api_url)
     url = "#{base_url}rgstr"
+
+    # Add debug logs for request details
+    Logger.error("Making log push request to: #{url}")
+    Logger.error("Request payload: #{inspect(logs)}")
+    Logger.error("Request headers: #{inspect(headers(api_key))}")
     result = Req.post(
       url: url,
       json: %{"events" => logs},
