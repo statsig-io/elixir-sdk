@@ -12,11 +12,7 @@ defmodule Statsig.Logging do
       events: [],
       flush_timer: nil,
     }, name: __MODULE__)
-  end
-
-  def initialize() do
-    GenServer.call(__MODULE__, {:initialize})
-  end
+end
 
   def flush do
     GenServer.call(__MODULE__, :flush)
@@ -24,21 +20,8 @@ defmodule Statsig.Logging do
 
   @impl true
   def init(state) do
-    case Application.get_env(:statsig, :api_key) do
-      key when is_binary(key) and byte_size(key) > 0 ->
-        timer = Process.send_after(__MODULE__, :flush_events, get_flush_interval())
+    timer = Process.send_after(__MODULE__, :flush_events, get_flush_interval())
         {:ok, Map.put(state, :flush_timer, timer)}
-      _ ->
-        {:ok, state}
-    end
-    {:ok, state}
-  end
-
-  @impl true
-  def handle_call({:initialize}, _from, state) do
-    timer = state.flush_timer || Process.send_after(__MODULE__, :flush_events, get_flush_interval())
-
-    {:reply, :ok, Map.put(state, :flush_timer, timer)}
   end
 
   @impl true

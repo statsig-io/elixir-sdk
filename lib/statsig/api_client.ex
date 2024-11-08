@@ -33,7 +33,7 @@ defmodule Statsig.APIClient do
     base_url = get_api_url(@default_logging_api_url)
     url = "#{base_url}rgstr"
 
-    result = Req.post(
+    Req.post(
       url: url,
       json: %{"events" => logs},
       headers: headers(get_api_key())

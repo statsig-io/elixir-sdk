@@ -1,19 +1,4 @@
 defmodule Statsig do
-  @type options :: %{
-    reload_interval: integer() | nil,
-    flush_interval: integer() | nil
-  }
-  def initialize() do
-    configs_result = Statsig.Configs.initialize()
-    logging_result = Statsig.Logging.initialize()
-
-    case {configs_result, logging_result} do
-      {:ok, :ok} ->
-        :ok
-      _ ->
-        {:error, :initialization_failed}
-    end
-  end
 
   def check_gate(user, gate) do
     user = Statsig.Utils.get_user_with_env(user)
