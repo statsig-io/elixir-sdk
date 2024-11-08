@@ -3,12 +3,9 @@ defmodule Statsig do
     reload_interval: integer() | nil,
     flush_interval: integer() | nil
   }
-  def initialize(options) do
-    reload_interval = Map.get(options, :reload_interval)
-    flush_interval = Map.get(options, :flush_interval)
-
-    configs_result = Statsig.Configs.initialize(reload_interval)
-    logging_result = Statsig.Logging.initialize(flush_interval)
+  def initialize() do
+    configs_result = Statsig.Configs.initialize()
+    logging_result = Statsig.Logging.initialize()
 
     case {configs_result, logging_result} do
       {:ok, :ok} ->
@@ -35,8 +32,10 @@ defmodule Statsig do
     result = Statsig.Evaluator.eval(user, config, :config)
     log_exposures(user, result.exposures, :config)
 
+    # TODO - could probably hand back a Result struct
     case result do
       %{reason: :not_found} -> {:error, :not_found}
+      # TODO - this be {:ok, result}
       _ -> %{rule_id: Map.get(result.rule, "id"), value: result.value}
     end
   end
@@ -61,9 +60,8 @@ defmodule Statsig do
     GenServer.cast(Statsig.Logging, {:log_event, event})
   end
 
-  def shutdown() do
-    configs_result = Statsig.Configs.shutdown()
-    logging_result = Statsig.Logging.shutdown()
+  def flush() do
+    logging_result = Statsig.Logging.flush()
   end
 
   defp log_exposures(user, [%{"gate" => c, "ruleID" => r} | secondary], :config) do

@@ -5,65 +5,53 @@ defmodule Statsig.Configs do
   @table_name :statsig_configs
 
   @type state :: %{
-    reload_interval: integer(),
     last_sync_time: integer(),
     reload_timer: reference() | nil
   }
 
   def start_link(_) do
     GenServer.start_link(__MODULE__, %{
-      reload_interval: 10_000,
       last_sync_time: 0,
       reload_timer: nil,
     }, name: __MODULE__)
   end
 
-  def initialize(reload_interval) do
-    GenServer.call(__MODULE__, {:initialize, reload_interval})
-  end
-
-  def shutdown do
-    GenServer.call(__MODULE__, :shutdown)
+  def initialize() do
+    GenServer.call(__MODULE__, {:initialize})
   end
 
   @impl true
   def init(state) do
     :ets.new(@table_name, [:named_table, :set, :public])
-    {:ok, state}
+    case Application.get_env(:statsig, :api_key) do
+      key when is_binary(key) and byte_size(key) > 0 ->
+        case do_initialize(state) do
+          {:ok, new_state} -> {:ok, new_state}
+          {:error, _reason} -> {:ok, state}
+        end
+      _ ->
+        {:ok, state}
+    end
   rescue
     ArgumentError ->
       {:ok, state}
   end
 
   @impl true
-  def handle_call({:initialize, reload_interval}, _from, state) do
-    new_state = if is_number(reload_interval) do
-      Map.put(state, :reload_interval, reload_interval)
-    else
-      state
+  def handle_call({:initialize}, _from, state) do
+    if state.reload_timer != nil do
+      {:ok, state}
     end
-
-    ensure_table_exists()
-
-    timer = Process.send_after(self(), :reload_configs, new_state.reload_interval)
-    Map.put(state, :reload_timer, timer)
-
-    case reload_configs(new_state) do
-      {:ok, updated_state} ->
-        {:reply, :ok, updated_state}
-      {:error, reason} ->
-        {:reply, {:error, :initialization_failed}, new_state}
+    case do_initialize(state) do
+      {:ok, new_state} -> {:reply, :ok, new_state}
+      {:error, _reason} -> {:reply, :ok, state}
     end
   end
 
   @impl true
   def handle_info(:reload_configs, state) do
-    new_state = if state.reload_interval != nil do
-      timer = Process.send_after(self(), :reload_configs, state.reload_interval)
-      Map.put(state, :reload_timer, timer)
-    else
-      state
-    end
+    timer = Process.send_after(self(), :reload_configs, get_reload_interval())
+    new_state = Map.put(state, :reload_timer, timer)
 
     case reload_configs(new_state) do
       {:ok, updated_state} -> {:noreply, updated_state}
@@ -71,32 +59,22 @@ defmodule Statsig.Configs do
     end
   end
 
-  @impl true
-  def handle_call(:shutdown, _from, state) do
-    if state.reload_timer != nil do
-      Process.cancel_timer(state.reload_timer)
-    end
-
-    new_state = %{state |
-      reload_timer: nil,
-    }
-
-    {:reply, :ok, new_state}
-  end
-
   def lookup(name, type) do
     ensure_table_exists()
     :ets.lookup(@table_name, {name, type})
   end
 
-  @impl true
-  def terminate(reason, state) do
-    :ok
+  defp do_initialize(state) do
+    timer = state.reload_timer || Process.send_after(self(), :reload_configs, get_reload_interval())
+    new_state = Map.put(state, :reload_timer, timer)
+
+    case reload_configs(new_state) do
+      {:ok, updated_state} -> {:ok, updated_state}
+      {:error, reason} -> {:error, :initialization_failed}
+    end
   end
 
   defp reload_configs(state) do
-    ensure_table_exists()
-
     case api_client().download_config_specs(state.last_sync_time) do
       {:ok, response} ->
         new_time = Map.get(response, "time", 0)
@@ -115,6 +93,10 @@ defmodule Statsig.Configs do
       error ->
         {:error, :reload_failed}
     end
+  end
+
+  defp get_reload_interval() do
+    Application.get_env(:statsig, :config_reload_interval, 10_000)
   end
 
   defp ensure_table_exists do

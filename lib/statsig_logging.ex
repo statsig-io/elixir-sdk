@@ -3,71 +3,42 @@ defmodule Statsig.Logging do
   require Logger
 
   @type state :: %{
-    flush_interval: integer() | nil,
     events: list(),
     flush_timer: reference() | nil
   }
 
   def start_link(_) do
     GenServer.start_link(__MODULE__, %{
-      flush_interval: 60_000,
       events: [],
       flush_timer: nil,
     }, name: __MODULE__)
   end
 
-  def initialize(flush_interval) do
-    GenServer.call(__MODULE__, {:initialize, flush_interval})
+  def initialize() do
+    GenServer.call(__MODULE__, {:initialize})
   end
 
-  def shutdown do
-    GenServer.call(__MODULE__, :shutdown)
+  def flush do
+    GenServer.call(__MODULE__, :flush)
   end
 
   @impl true
   def init(state) do
+    case Application.get_env(:statsig, :api_key) do
+      key when is_binary(key) and byte_size(key) > 0 ->
+        timer = Process.send_after(__MODULE__, :flush_events, get_flush_interval())
+        {:ok, Map.put(state, :flush_timer, timer)}
+      _ ->
+        {:ok, state}
+    end
     {:ok, state}
   end
 
   @impl true
-  def handle_call(:shutdown, _from, state) do
-    Logger.info("Shutting down Statsig.Logging")
+  def handle_call({:initialize}, _from, state) do
+    timer = state.flush_timer || Process.send_after(__MODULE__, :flush_events, get_flush_interval())
 
-
-    new_state = if length(state.events) > 0 do
-      Logger.info("Flushing #{length(state.events)} events before shutdown")
-      flush_events(state)
-    else
-      state
-    end
-
-    if state.flush_timer, do: Process.cancel_timer(state.flush_timer)
-
-    new_state = %{new_state |
-      flush_timer: nil,
-      flush_interval: nil,
-    }
-
-    {:reply, :ok, new_state}
-  end
-
-
-  @impl true
-  def handle_call({:initialize, flush_interval}, _from, state) do
-    new_state = if is_number(flush_interval) do
-      Map.put(state, :flush_interval, flush_interval)
-    else
-      state
-    end
-
-    new_state = if new_state.flush_interval != nil do
-      timer = Process.send_after(__MODULE__, :flush_events, new_state.flush_interval)
-      Map.put(new_state, :flush_timer, timer)
-    else
-      new_state
-    end
-
-    {:reply, :ok, new_state}
+    {:reply, :ok, Map.put(state, :flush_timer, timer)}
   end
 
   @impl true
@@ -79,14 +50,9 @@ defmodule Statsig.Logging do
 
   @impl true
   def handle_info(:flush_events, state) do
-    new_state = if state.flush_interval != nil do
-      timer = Process.send_after(__MODULE__, :flush_events, state.flush_interval)
-      Map.put(state, :flush_timer, timer)
-    else
-      state
-    end
+    timer = Process.send_after(__MODULE__, :flush_events, get_flush_interval())
 
-    new_state = flush_events(new_state)
+    new_state = flush_events(Map.put(state, :flush_timer, timer))
     {:noreply, new_state}
   end
 
@@ -104,6 +70,10 @@ defmodule Statsig.Logging do
     end
 
     :ok
+  end
+
+  defp get_flush_interval() do
+    Application.get_env(:statsig, :logging_flush_interval, 60_000)
   end
 
   defp flush_events(%{events: []} = state), do: state
