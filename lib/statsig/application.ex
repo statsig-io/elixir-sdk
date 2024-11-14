@@ -5,7 +5,6 @@ defmodule Statsig.Application do
   def start(_type, args) do
     api_key = Keyword.get(args, :api_key)
     Application.put_env(:statsig, :api_key, api_key)
-    Logger.error("setting api key #{inspect(api_key)}")
 
     children = [
       Statsig.Configs,
