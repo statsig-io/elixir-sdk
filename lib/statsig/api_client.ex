@@ -11,8 +11,6 @@ defmodule Statsig.APIClient do
     |> URI.append_query(URI.encode_query(sinceTime: since_time))
     |> URI.to_string()
 
-    Logger.error("downloading config specs from #{url}")
-
     result = Req.get(url: url)
 
     case result do
@@ -56,8 +54,7 @@ defmodule Statsig.APIClient do
   end
 
   defp api_key() do
-    # Application.get_env(:statsig, :api_key)
-    "secret-CP6EOotVVs6oKO6tITIcfCdul8P4X5aCNgikbQDxCud"
+    Application.get_env(:statsig, :api_key)
   end
 
   defp api_url(default_url) do
