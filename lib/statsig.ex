@@ -42,7 +42,7 @@ defmodule Statsig do
       "time" => :os.system_time(:millisecond),
       "user" => Statsig.Utils.sanitize_user(user)
     }
-    GenServer.cast(Statsig.Logging, {:log_event, event})
+    Statsig.Logging.log_event(event)
   end
 
   def flush() do
@@ -59,7 +59,7 @@ defmodule Statsig do
       base_event(user, secondary, :config)
       |> Map.put("metadata", primary)
 
-      GenServer.cast(Statsig.Logging, {:log_event, event})
+    Statsig.Logging.log_event(event)
   end
 
   defp log_exposures(user, [primary | secondary], type) do
@@ -67,7 +67,7 @@ defmodule Statsig do
       base_event(user, secondary, type)
       |> Map.put("metadata", primary)
 
-      GenServer.cast(Statsig.Logging, {:log_event, event})
+      Statsig.Logging.log_event(event)
   end
 
   defp base_event(user, secondary, type) do
