@@ -1,22 +1,26 @@
 defmodule Statsig.APIClient do
   require Logger
-  @default_logging_api_url "https://statsigapi.net/v1/"
-  @default_config_specs_api_url "https://api.statsigcdn.com/v1/"
+  @default_logging_api_url "https://statsigapi.net/v1"
+  @default_config_specs_api_url "https://api.statsigcdn.com/v1"
 
   def download_config_specs(since_time \\ 0) do
-    base_url = get_api_url(@default_config_specs_api_url)
-    url = "#{base_url}download_config_specs/#{get_api_key()}.json?sinceTime=#{since_time}"
+    base_url = api_url(@default_config_specs_api_url)
+
+    url = URI.new!(base_url)
+    |> URI.append_path("/download_config_specs/#{api_key()}.json")
+    |> URI.append_query(URI.encode_query(sinceTime: since_time))
+    |> URI.to_string()
+
+    Logger.error("downloading config specs from #{url}")
 
     result = Req.get(url: url)
 
     case result do
-      {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
-        if is_map(body) do
-          {:ok, body}
-        else
-          Logger.error("Invalid response format, expected map got: #{inspect(body)}")
-          {:error, :invalid_response_format, body}
-        end
+      {:ok, %Req.Response{status: status, body: %{} = body}} when status in 200..299 ->
+        {:ok, body}
+      {:ok, %Req.Response{status: status} = response} when status in 200..299 ->
+        Logger.error("Invalid response format, expected map got: #{inspect(response.body)}")
+        {:error, {:invalid_response_format, response.body}}
       {:ok, %Req.Response{status: status, body: body}} ->
         Logger.error("HTTP error: status #{status}, body: #{inspect(body)}")
         {:error, :http_error, status}
@@ -30,24 +34,33 @@ defmodule Statsig.APIClient do
   end
 
   def push_logs(logs) do
-    base_url = get_api_url(@default_logging_api_url)
-    url = "#{base_url}rgstr"
+    base_url = api_url(@default_logging_api_url)
+
+    url = URI.new!(base_url)
+    |> URI.append_path("/rgstr")
+    |> URI.to_string()
 
     Req.post(
       url: url,
       json: %{"events" => logs},
-      headers: headers(get_api_key())
+      headers: headers(api_key())
     ) |> case do
       {:ok, %{status: code}} when code < 300 -> {:ok, []}
-      _ -> {:error, logs}
+      {:ok, response} ->
+        Logger.error("Failed to push logs: status #{response.status}, body: #{inspect(response.body)}")
+        {:error, logs}
+      {:error, error} ->
+        Logger.error("Failed to push logs: #{inspect(error)}")
+        {:error, logs}
     end
   end
 
-  defp get_api_key() do
-    Application.get_env(:statsig, :api_key)
+  defp api_key() do
+    # Application.get_env(:statsig, :api_key)
+    "secret-CP6EOotVVs6oKO6tITIcfCdul8P4X5aCNgikbQDxCud"
   end
 
-  defp get_api_url(default_url) do
+  defp api_url(default_url) do
     url = Application.get_env(:statsig, :api_url, default_url)
     if String.ends_with?(url, "/"), do: url, else: url <> "/"
   end

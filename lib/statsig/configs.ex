@@ -4,47 +4,56 @@ defmodule Statsig.Configs do
 
   @table_name :statsig_configs
 
-  @type state :: %{
-    last_sync_time: integer(),
-    reload_timer: reference() | nil
-  }
+  defmodule State do
+    @type t :: %__MODULE__{
+      last_sync_time: integer(),
+      reload_timer: reference() | nil,
+      reload_interval: integer()
+    }
+
+    defstruct last_sync_time: 0,
+              reload_timer: nil,
+              reload_interval: 10_000
+
+    def new(opts \\ []) do
+      reload_interval = Keyword.get(opts, :reload_interval, 10_000)
+      %__MODULE__{reload_interval: reload_interval}
+    end
+
+    def schedule_reload(%__MODULE__{} = state) do
+      timer = Process.send_after(self(), :reload_configs, state.reload_interval)
+      %__MODULE__{state | reload_timer: timer}
+    end
+  end
 
   def start_link(_) do
-    GenServer.start_link(__MODULE__, %{
-      last_sync_time: 0,
-      reload_timer: nil,
-    }, name: __MODULE__)
+    GenServer.start_link(__MODULE__, State.new(), name: __MODULE__)
+  end
+
+  def lookup(name, type) do
+    :ets.lookup(@table_name, {name, type})
   end
 
   @impl true
-  def init(state) do
-    Logger.error("Initializing Statsig.Configs #{inspect(Application.get_all_env(:statsig))}")
-    Logger.error("Stacktrace: #{inspect(Process.info(self(), :current_stacktrace))}")
+  def init(_) do
     :ets.new(@table_name, [:named_table, :set, :public])
-    timer = state.reload_timer || Process.send_after(self(), :reload_configs, get_reload_interval())
-    new_state = Map.put(state, :reload_timer, timer)
+    state = State.new(reload_interval: reload_interval())
+    |> State.schedule_reload()
 
-    case reload_configs(new_state) do
+    case attempt_reload(state) do
       {:ok, updated_state} -> {:ok, updated_state}
-      {:error, :reload_failed, _error} -> {:ok, state}
-      {:error, reason} -> {:ok, state}
+      {:error, error_state} -> {:ok, error_state}
     end
   end
 
   @impl true
   def handle_info(:reload_configs, state) do
-    timer = Process.send_after(self(), :reload_configs, get_reload_interval())
-    new_state = Map.put(state, :reload_timer, timer)
+    new_state = State.schedule_reload(state)
 
-    case reload_configs(new_state) do
+    case attempt_reload(new_state) do
       {:ok, updated_state} -> {:noreply, updated_state}
-      {:error, :reload_failed, _error} -> {:noreply, state}
-      {:error, _reason} -> {:noreply, new_state}
+      {:error, error_state} -> {:noreply, error_state}
     end
-  end
-
-  def lookup(name, type) do
-    :ets.lookup(@table_name, {name, type})
   end
 
   defp reload_configs(state) do
@@ -57,7 +66,7 @@ defmodule Statsig.Configs do
           response |> Map.get("feature_gates", []) |> update_configs(:gate)
           response |> Map.get("dynamic_configs", []) |> update_configs(:config)
 
-          {:ok, Map.put(state, :last_sync_time, new_time)}
+          {:ok, %{state | last_sync_time: new_time}}
         else
           {:ok, state}
         end
@@ -66,7 +75,20 @@ defmodule Statsig.Configs do
     end
   end
 
-  defp get_reload_interval() do
+  defp attempt_reload(state) do
+    case reload_configs(state) do
+      {:ok, updated_state} ->
+        {:ok, updated_state}
+      {:error, error_type, details} ->
+        Logger.error("Failed to reload Statsig configs: #{inspect(error_type)} #{inspect(details)}")
+        {:error, :reload_failed, {:error, error_type, details}}
+      {:error, error} ->
+        Logger.error("Unexpected error while reloading Statsig configs: #{inspect(error)}")
+        {:error, :reload_failed, error}
+    end
+  end
+
+  defp reload_interval() do
     Application.get_env(:statsig, :config_reload_interval, 10_000)
   end
 

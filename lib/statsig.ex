@@ -30,7 +30,7 @@ defmodule Statsig do
   end
 
   def log_event(event) do
-    GenServer.cast(Statsig.Logging, {:log_event, event})
+    Statsig.Logging.log_event(event)
   end
 
   def log_event(user, event_name, value, metadata) do

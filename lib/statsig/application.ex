@@ -2,22 +2,14 @@ defmodule Statsig.Application do
   use Application
   require Logger
 
-  def start(_type, _args) do
-    Logger.error("Starting Statsig application")
-    Logger.error("All running applications: #{inspect(Application.started_applications())}")
-    Logger.error("Start type: #{inspect(_type)}")
-    Logger.error("Process dictionary: #{inspect(Process.get())}")
-    Logger.error("System flags: #{inspect(System.get_env())}")
-    Logger.error("Full stacktrace:", %{
-      stacktrace: try do
-        throw(:trace)
-      catch
-        :trace -> __STACKTRACE__
-      end
-    })
+  def start(_type, args) do
+    api_key = Keyword.get(args, :api_key)
+    Application.put_env(:statsig, :api_key, api_key)
+    Logger.error("setting api key #{inspect(api_key)}")
+
     children = [
-      {Statsig.Configs, []},
-      {Statsig.Logging, []}
+      Statsig.Configs,
+      Statsig.Logging,
     ]
 
     opts = [strategy: :one_for_one, name: Statsig.Supervisor]
@@ -25,6 +17,7 @@ defmodule Statsig.Application do
   end
 
   def stop(_state) do
+    Logger.error("Statsig application stopping: #{inspect(Process.info(self()))}")
     :ok
   end
 end
