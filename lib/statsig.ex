@@ -67,7 +67,7 @@ defmodule Statsig do
       base_event(user, secondary, type)
       |> Map.put("metadata", primary)
 
-      Statsig.Logging.log_event(event)
+    Statsig.Logging.log_event(event)
   end
 
   defp base_event(user, secondary, type) do
