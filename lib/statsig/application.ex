@@ -5,7 +5,7 @@ defmodule Statsig.Application do
   def start(_type, args) do
     children = [
       Statsig.Configs,
-      Statsig.Logging,
+      Statsig.Logging
     ]
 
     opts = [strategy: :one_for_one, name: Statsig.Supervisor]

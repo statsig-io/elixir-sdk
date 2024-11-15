@@ -1,5 +1,4 @@
 defmodule Statsig do
-
   def check_gate(user, gate) do
     user = Statsig.Utils.get_user_with_env(user)
 
@@ -35,6 +34,7 @@ defmodule Statsig do
 
   def log_event(user, event_name, value, metadata) do
     user = Statsig.Utils.get_user_with_env(user)
+
     event = %{
       :eventName => event_name,
       :value => value,
@@ -42,6 +42,7 @@ defmodule Statsig do
       :time => System.system_time(:millisecond),
       :user => Statsig.Utils.sanitize_user(user)
     }
+
     Statsig.Logging.log_event(event)
   end
 
@@ -78,5 +79,4 @@ defmodule Statsig do
       "user" => user
     }
   end
-
 end

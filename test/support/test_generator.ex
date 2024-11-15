@@ -19,9 +19,7 @@ defmodule Statsig.TestGenerator do
         quote do
           test(
             unquote(
-              "#{type} #{name} for #{Map.get(user, "userID")} | #{
-                :crypto.strong_rand_bytes(8) |> Base.encode64()
-              }"
+              "#{type} #{name} for #{Map.get(user, "userID")} | #{:crypto.strong_rand_bytes(8) |> Base.encode64()}"
             )
           ) do
             # skip if it's not supported (need to eventually support these, though)
@@ -61,25 +59,25 @@ defmodule Statsig.TestGenerator do
   end
 
   def all_conditions_supported?(gate, :gate, _server)
-    when gate in @unsupported_gates,
-    do: false
+      when gate in @unsupported_gates,
+      do: false
 
   def all_conditions_supported?(config, :config, _server)
-    when config in @unsupported_configs,
-    do: false
+      when config in @unsupported_configs,
+      do: false
 
   def all_conditions_supported?(gate, type, server) do
-  case Statsig.lookup(gate, type, server) do
-    [{_key, spec}] ->
-      Enum.reduce(Map.get(spec, "rules"), true, fn %{"conditions" => c}, acc ->
-        acc &&
-          Enum.reduce(c, true, fn %{"type" => type}, c_acc ->
-            c_acc && !Enum.any?(@unsupported_conditions, fn n -> n == type end)
-          end)
-      end)
+    case Statsig.lookup(gate, type, server) do
+      [{_key, spec}] ->
+        Enum.reduce(Map.get(spec, "rules"), true, fn %{"conditions" => c}, acc ->
+          acc &&
+            Enum.reduce(c, true, fn %{"type" => type}, c_acc ->
+              c_acc && !Enum.any?(@unsupported_conditions, fn n -> n == type end)
+            end)
+        end)
 
-    _ ->
-      true
-  end
+      _ ->
+        true
+    end
   end
 end

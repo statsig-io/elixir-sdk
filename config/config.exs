@@ -22,7 +22,7 @@ import Config
 #
 
 try do
-  Config.import_config "#{Mix.env()}.exs"
+  Config.import_config("#{Mix.env()}.exs")
 rescue
   # nothing, I just don't want to error
   _ -> :ok

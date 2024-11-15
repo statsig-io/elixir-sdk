@@ -29,7 +29,7 @@ defmodule Statsig.MixProject do
     [
       {:req, "~> 0.5"},
       {:jason, "~> 1.2"},
-      {:ua_parser, "~> 1.8"},
+      {:ua_parser, "~> 1.8"}
     ]
   end
 end

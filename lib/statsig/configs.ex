@@ -6,10 +6,10 @@ defmodule Statsig.Configs do
 
   defmodule State do
     @type t :: %__MODULE__{
-      last_sync_time: integer(),
-      reload_timer: reference() | nil,
-      reload_interval: integer()
-    }
+            last_sync_time: integer(),
+            reload_timer: reference() | nil,
+            reload_interval: integer()
+          }
 
     defstruct last_sync_time: 0,
               reload_timer: nil,
@@ -40,8 +40,10 @@ defmodule Statsig.Configs do
   @impl true
   def init(_) do
     :ets.new(@table_name, [:named_table, :set, :public])
-    state = State.new()
-    |> State.schedule_reload()
+
+    state =
+      State.new()
+      |> State.schedule_reload()
 
     case attempt_reload(state) do
       {:ok, updated_state} -> {:ok, updated_state}
@@ -73,6 +75,7 @@ defmodule Statsig.Configs do
         else
           {:ok, state}
         end
+
       error ->
         {:error, :reload_failed, error}
     end
@@ -82,9 +85,14 @@ defmodule Statsig.Configs do
     case reload_configs(state) do
       {:ok, updated_state} ->
         {:ok, updated_state}
+
       {:error, error_type, details} ->
-        Logger.error("Failed to reload Statsig configs: #{inspect(error_type)} #{inspect(details)}")
+        Logger.error(
+          "Failed to reload Statsig configs: #{inspect(error_type)} #{inspect(details)}"
+        )
+
         {:error, error_type, state}
+
       {:error, error} ->
         Logger.error("Unexpected error while reloading Statsig configs: #{inspect(error)}")
         {:error, :reload_failed, state}
@@ -103,5 +111,4 @@ defmodule Statsig.Configs do
   end
 
   defp api_client, do: Application.get_env(:statsig, :api_client, Statsig.APIClient)
-
 end

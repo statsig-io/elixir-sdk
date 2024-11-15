@@ -8,27 +8,33 @@ defmodule Statsig.APIClient do
       {:ok, key} ->
         base_url = api_url(@default_config_specs_api_url)
 
-        url = URI.new!(base_url)
-        |> URI.append_path(Path.join("/download_config_specs", key <> ".json"))
-        |> URI.append_query(URI.encode_query(sinceTime: to_string(since_time)))
-        |> URI.to_string()
+        url =
+          URI.new!(base_url)
+          |> URI.append_path(Path.join("/download_config_specs", key <> ".json"))
+          |> URI.append_query(URI.encode_query(sinceTime: to_string(since_time)))
+          |> URI.to_string()
 
         case Req.get(url) do
           {:ok, %Req.Response{status: status, body: %{} = body}} when status in 200..299 ->
             {:ok, body}
+
           {:ok, %Req.Response{status: status} = response} when status in 200..299 ->
             Logger.error("Invalid response format, expected map got: #{inspect(response.body)}")
             {:error, {:invalid_response_format, response.body}}
+
           {:ok, %Req.Response{status: status, body: body}} ->
             Logger.error("HTTP error: status #{status}, body: #{inspect(body)}")
             {:error, :http_error, status}
+
           {:error, :unexpected_error, error} ->
             Logger.error("Unexpected error: #{inspect(error)}")
             {:error, :unexpected_error, error}
+
           {:error, error} ->
             Logger.error("Unexpected error: #{inspect(error)}")
             {:error, :unexpected_error, error}
-          end
+        end
+
       {:error, reason} ->
         Logger.error("Failed to get API key: #{reason}")
         {:error, :missing_api_key, reason}
@@ -40,19 +46,27 @@ defmodule Statsig.APIClient do
       {:ok, key} = key_result ->
         base_url = api_url(@default_logging_api_url)
 
-        url = URI.new!(base_url)
-        |> URI.append_path("/rgstr")
-        |> URI.to_string()
+        url =
+          URI.new!(base_url)
+          |> URI.append_path("/rgstr")
+          |> URI.to_string()
 
         case Req.post(url: url, json: %{events: logs}, headers: headers(key)) do
-          {:ok, %{status: code}} when code < 300 -> {:ok, []}
+          {:ok, %{status: code}} when code < 300 ->
+            {:ok, []}
+
           {:ok, response} ->
-            Logger.error("Failed to push logs: status #{response.status}, body: #{inspect(response.body)}")
+            Logger.error(
+              "Failed to push logs: status #{response.status}, body: #{inspect(response.body)}"
+            )
+
             {:error, logs}
+
           {:error, error} ->
             Logger.error("Failed to push logs: #{inspect(error)}")
             {:error, logs}
         end
+
       {:error, reason} ->
         Logger.error("Failed to get API key: #{reason}")
         {:error, logs}
@@ -64,8 +78,10 @@ defmodule Statsig.APIClient do
       nil ->
         Logger.error("Statsig API key is not configured")
         {:error, "API key not configured"}
+
       key when is_binary(key) ->
         {:ok, key}
+
       key ->
         Logger.error("Invalid Statsig API key format: #{inspect(key)}")
         {:error, "Invalid API key format"}
@@ -86,5 +102,4 @@ defmodule Statsig.APIClient do
       {"STATSIG-CLIENT-TIME", :os.system_time(:millisecond)}
     ]
   end
-
 end

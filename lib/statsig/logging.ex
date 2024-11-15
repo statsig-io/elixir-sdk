@@ -6,10 +6,10 @@ defmodule Statsig.Logging do
     defstruct events: [], flush_timer: nil, flush_interval: 60_000
 
     @type t :: %__MODULE__{
-      events: list(),
-      flush_timer: reference() | nil,
-      flush_interval: integer()
-    }
+            events: list(),
+            flush_timer: reference() | nil,
+            flush_interval: integer()
+          }
 
     def new(opts \\ []) do
       %__MODULE__{
@@ -32,17 +32,21 @@ defmodule Statsig.Logging do
     end
 
     def flush_events(%__MODULE__{events: []} = state), do: {state, []}
+
     def flush_events(%__MODULE__{events: events} = state) do
-      {failed_events, successful_events} = events
-      |> Enum.chunk_every(500)
-      |> Enum.reduce({[], []}, fn chunk, {failed, successful} ->
-        case api_client().push_logs(chunk) do
-          {:ok, _} -> {failed, successful ++ chunk}
-          {:error, reason} ->
-            Logger.error("Failed to flush events: #{inspect(reason)}")
-            {failed ++ chunk, successful}
-        end
-      end)
+      {failed_events, successful_events} =
+        events
+        |> Enum.chunk_every(500)
+        |> Enum.reduce({[], []}, fn chunk, {failed, successful} ->
+          case api_client().push_logs(chunk) do
+            {:ok, _} ->
+              {failed, successful ++ chunk}
+
+            {:error, reason} ->
+              Logger.error("Failed to flush events: #{inspect(reason)}")
+              {failed ++ chunk, successful}
+          end
+        end)
 
       {%{state | events: failed_events}, successful_events}
     end
@@ -92,8 +96,8 @@ defmodule Statsig.Logging do
 
   @impl true
   def terminate(reason, state) do
-    {_, _} = State.flush_events(state) # best effort
+    # best effort
+    {_, _} = State.flush_events(state)
     :ok
   end
-
 end
