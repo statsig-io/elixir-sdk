@@ -36,18 +36,16 @@ defmodule Statsig do
   def log_event(user, event_name, value, metadata) do
     user = Statsig.Utils.get_user_with_env(user)
     event = %{
-      "eventName" => event_name,
-      "value" => value,
-      "metadata" => metadata,
-      "time" => :os.system_time(:millisecond),
-      "user" => Statsig.Utils.sanitize_user(user)
+      :eventName => event_name,
+      :value => value,
+      :metadata => metadata,
+      :time => System.system_time(:millisecond),
+      :user => Statsig.Utils.sanitize_user(user)
     }
     Statsig.Logging.log_event(event)
   end
 
-  def flush() do
-    logging_result = Statsig.Logging.flush()
-  end
+  defdelegate flush(), to: Statsig.Logging
 
   defp log_exposures(user, [%{"gate" => c, "ruleID" => r} | secondary], :config) do
     primary = %{
@@ -76,7 +74,7 @@ defmodule Statsig do
     %{
       "eventName" => "statsig::#{type}_exposure",
       "secondaryExposures" => secondary,
-      "time" => DateTime.utc_now() |> DateTime.to_unix(:millisecond),
+      "time" => System.system_time(:millisecond),
       "user" => user
     }
   end

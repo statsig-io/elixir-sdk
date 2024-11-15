@@ -13,9 +13,9 @@ defmodule Statsig.Logging do
 
     def new(opts \\ []) do
       %__MODULE__{
-        events: Keyword.get(opts, :events, []),
-        flush_timer: Keyword.get(opts, :flush_timer),
-        flush_interval: Application.get_env(:statsig, :logging_flush_interval, 60_000)
+        events: [],
+        flush_timer: nil,
+        flush_interval: flush_interval()
       }
     end
 
@@ -30,6 +30,28 @@ defmodule Statsig.Logging do
     def clear_events(state) do
       %{state | events: []}
     end
+
+    def flush_events(%__MODULE__{events: []} = state), do: {state, []}
+    def flush_events(%__MODULE__{events: events} = state) do
+      {failed_events, successful_events} = events
+      |> Enum.chunk_every(500)
+      |> Enum.reduce({[], []}, fn chunk, {failed, successful} ->
+        case api_client().push_logs(chunk) do
+          {:ok, _} -> {failed, successful ++ chunk}
+          {:error, reason} ->
+            Logger.error("Failed to flush events: #{inspect(reason)}")
+            {failed ++ chunk, successful}
+        end
+      end)
+
+      {%{state | events: failed_events}, successful_events}
+    end
+
+    defp flush_interval() do
+      Application.get_env(:statsig, :logging_flush_interval, 60_000)
+    end
+
+    defp api_client, do: Application.get_env(:statsig, :api_client, Statsig.APIClient)
   end
 
   def start_link(_) do
@@ -52,15 +74,14 @@ defmodule Statsig.Logging do
 
   @impl true
   def handle_call(:flush, _from, state) do
-    new_state = flush_events(state)
-    unsent_events = new_state.events
-    {:reply, unsent_events, new_state}
+    {new_state, _} = State.flush_events(state)
+    {:reply, :ok, new_state}
   end
 
   @impl true
   def handle_info(:flush_events, state) do
     timer = Process.send_after(__MODULE__, :flush_events, state.flush_interval)
-    new_state = flush_events(State.set_timer(state, timer))
+    {new_state, _} = State.flush_events(State.set_timer(state, timer))
     {:noreply, new_state}
   end
 
@@ -71,22 +92,8 @@ defmodule Statsig.Logging do
 
   @impl true
   def terminate(reason, state) do
-    flush_events(state)
-
+    {_, _} = State.flush_events(state) # best effort
     :ok
   end
-
-  defp flush_events(%State{events: []} = state), do: state
-  defp flush_events(state) do
-    case api_client().push_logs(state.events) do
-      {:ok, _} -> State.clear_events(state)
-      {:error, reason} ->
-        Logger.error("Failed to flush events: #{inspect(reason)}")
-        state
-    end
-  end
-
-
-  defp api_client, do: Application.get_env(:statsig, :api_client, Statsig.APIClient)
 
 end

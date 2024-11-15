@@ -3,9 +3,6 @@ defmodule Statsig.Application do
   require Logger
 
   def start(_type, args) do
-    api_key = Keyword.get(args, :api_key)
-    Application.put_env(:statsig, :api_key, api_key)
-
     children = [
       Statsig.Configs,
       Statsig.Logging,

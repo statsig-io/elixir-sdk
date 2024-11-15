@@ -15,19 +15,22 @@ defmodule Statsig.Configs do
               reload_timer: nil,
               reload_interval: 10_000
 
-    def new(opts \\ []) do
-      reload_interval = Keyword.get(opts, :reload_interval, 10_000)
-      %__MODULE__{reload_interval: reload_interval}
+    def new() do
+      %__MODULE__{reload_interval: reload_interval()}
     end
 
     def schedule_reload(%__MODULE__{} = state) do
       timer = Process.send_after(self(), :reload_configs, state.reload_interval)
       %__MODULE__{state | reload_timer: timer}
     end
+
+    defp reload_interval() do
+      Application.get_env(:statsig, :config_reload_interval, 10_000)
+    end
   end
 
   def start_link(_) do
-    GenServer.start_link(__MODULE__, State.new(), name: __MODULE__)
+    GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
   def lookup(name, type) do
@@ -37,12 +40,12 @@ defmodule Statsig.Configs do
   @impl true
   def init(_) do
     :ets.new(@table_name, [:named_table, :set, :public])
-    state = State.new(reload_interval: reload_interval())
+    state = State.new()
     |> State.schedule_reload()
 
     case attempt_reload(state) do
       {:ok, updated_state} -> {:ok, updated_state}
-      {:error, error_state} -> {:ok, error_state}
+      {:error, _reason, error_state} -> {:ok, error_state}
     end
   end
 
@@ -81,10 +84,10 @@ defmodule Statsig.Configs do
         {:ok, updated_state}
       {:error, error_type, details} ->
         Logger.error("Failed to reload Statsig configs: #{inspect(error_type)} #{inspect(details)}")
-        {:error, :reload_failed, {:error, error_type, details}}
+        {:error, error_type, state}
       {:error, error} ->
         Logger.error("Unexpected error while reloading Statsig configs: #{inspect(error)}")
-        {:error, :reload_failed, error}
+        {:error, :reload_failed, state}
     end
   end
 
