@@ -40,15 +40,15 @@ defmodule Statsig.Logging do
         |> Enum.reduce({[], []}, fn chunk, {failed, successful} ->
           case api_client().push_logs(chunk) do
             {:ok, _} ->
-              {failed, successful ++ chunk}
+              {failed, [successful, chunk]}
 
             {:error, reason} ->
               Logger.error("Failed to flush events: #{inspect(reason)}")
-              {failed ++ chunk, successful}
+              {[failed, chunk], successful}
           end
         end)
 
-      {%{state | events: failed_events}, successful_events}
+      {%{state | events: List.flatten(failed_events)}, List.flatten(successful_events)}
     end
 
     defp flush_interval() do
@@ -56,6 +56,14 @@ defmodule Statsig.Logging do
     end
 
     defp api_client, do: Application.get_env(:statsig, :api_client, Statsig.APIClient)
+
+    def schedule_flush(state) do
+      if state.flush_timer != nil do
+        Process.cancel_timer(state.flush_timer)
+      end
+      timer = Process.send_after(Statsig.Logging, :flush_events, state.flush_interval)
+      %{state | flush_timer: timer}
+    end
   end
 
   def start_link(_) do
@@ -72,8 +80,7 @@ defmodule Statsig.Logging do
 
   @impl true
   def init(state) do
-    timer = Process.send_after(__MODULE__, :flush_events, state.flush_interval)
-    {:ok, State.set_timer(state, timer)}
+    {:ok, State.schedule_flush(state)}
   end
 
   @impl true
@@ -84,8 +91,7 @@ defmodule Statsig.Logging do
 
   @impl true
   def handle_info(:flush_events, state) do
-    timer = Process.send_after(__MODULE__, :flush_events, state.flush_interval)
-    {new_state, _} = State.flush_events(State.set_timer(state, timer))
+    {new_state, _} = State.flush_events(State.schedule_flush(state))
     {:noreply, new_state}
   end
 

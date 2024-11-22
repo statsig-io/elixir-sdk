@@ -3,6 +3,7 @@ defmodule Statsig.Configs do
   require Logger
 
   @table_name :statsig_configs
+  @default_reload_interval :timer.seconds(10)
 
   defmodule State do
     @type t :: %__MODULE__{
@@ -13,7 +14,7 @@ defmodule Statsig.Configs do
 
     defstruct last_sync_time: 0,
               reload_timer: nil,
-              reload_interval: 10_000
+              reload_interval: @default_reload_interval
 
     def new() do
       %__MODULE__{reload_interval: reload_interval()}
@@ -25,7 +26,7 @@ defmodule Statsig.Configs do
     end
 
     defp reload_interval() do
-      Application.get_env(:statsig, :config_reload_interval, 10_000)
+      Application.get_env(:statsig, :config_reload_interval, @default_reload_interval)
     end
   end
 
@@ -40,24 +41,19 @@ defmodule Statsig.Configs do
   @impl true
   def init(_) do
     :ets.new(@table_name, [:named_table, :set, :public])
+    initial_state = State.new()
 
-    state =
-      State.new()
-      |> State.schedule_reload()
-
-    case attempt_reload(state) do
-      {:ok, updated_state} -> {:ok, updated_state}
-      {:error, _reason, error_state} -> {:ok, error_state}
+    case attempt_reload(initial_state) do
+      {:ok, updated_state} -> {:ok, State.schedule_reload(updated_state)}
+      {:error, _error} -> {:ok, State.schedule_reload(initial_state)}
     end
   end
 
   @impl true
   def handle_info(:reload_configs, state) do
-    new_state = State.schedule_reload(state)
-
-    case attempt_reload(new_state) do
-      {:ok, updated_state} -> {:noreply, updated_state}
-      {:error, error_state} -> {:noreply, error_state}
+    case attempt_reload(state) do
+      {:ok, updated_state} -> {:noreply, State.schedule_reload(updated_state)}
+      {:error, _error} -> {:noreply, State.schedule_reload(state)}
     end
   end
 
@@ -77,7 +73,7 @@ defmodule Statsig.Configs do
         end
 
       error ->
-        {:error, :reload_failed, error}
+        {:error, {:reload_failed, error}}
     end
   end
 
@@ -85,17 +81,9 @@ defmodule Statsig.Configs do
     case reload_configs(state) do
       {:ok, updated_state} ->
         {:ok, updated_state}
-
-      {:error, error_type, details} ->
-        Logger.error(
-          "Failed to reload Statsig configs: #{inspect(error_type)} #{inspect(details)}"
-        )
-
-        {:error, error_type, state}
-
       {:error, error} ->
         Logger.error("Unexpected error while reloading Statsig configs: #{inspect(error)}")
-        {:error, :reload_failed, state}
+        {:error, {:reload_failed, error}}
     end
   end
 

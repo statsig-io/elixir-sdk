@@ -28,22 +28,20 @@ defmodule Statsig do
     get_config(user, experiment)
   end
 
-  def log_event(event) do
-    Statsig.Logging.log_event(event)
-  end
+  defdelegate log_event(event), to: Statsig.Logging
 
   def log_event(user, event_name, value, metadata) do
     user = Statsig.Utils.get_user_with_env(user)
 
     event = %{
-      :eventName => event_name,
-      :value => value,
-      :metadata => metadata,
-      :time => System.system_time(:millisecond),
-      :user => Statsig.Utils.sanitize_user(user)
+      eventName: event_name,
+      value: value,
+      metadata: metadata,
+      time: System.system_time(:millisecond),
+      user: Statsig.Utils.sanitize_user(user)
     }
 
-    Statsig.Logging.log_event(event)
+    log_event(event)
   end
 
   defdelegate flush(), to: Statsig.Logging
@@ -58,7 +56,7 @@ defmodule Statsig do
       base_event(user, secondary, :config)
       |> Map.put("metadata", primary)
 
-    Statsig.Logging.log_event(event)
+    log_event(event)
   end
 
   defp log_exposures(user, [primary | secondary], type) do
@@ -66,17 +64,17 @@ defmodule Statsig do
       base_event(user, secondary, type)
       |> Map.put("metadata", primary)
 
-    Statsig.Logging.log_event(event)
+    log_event(event)
   end
 
   defp base_event(user, secondary, type) do
     user = Statsig.Utils.sanitize_user(user)
 
     %{
-      "eventName" => "statsig::#{type}_exposure",
-      "secondaryExposures" => secondary,
-      "time" => System.system_time(:millisecond),
-      "user" => user
+      eventName: "statsig::#{type}_exposure",
+      secondaryExposures: secondary,
+      time: System.system_time(:millisecond),
+      user: user
     }
   end
 end

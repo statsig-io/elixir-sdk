@@ -26,10 +26,6 @@ defmodule Statsig.APIClient do
             Logger.error("HTTP error: status #{status}, body: #{inspect(body)}")
             {:error, :http_error, status}
 
-          {:error, :unexpected_error, error} ->
-            Logger.error("Unexpected error: #{inspect(error)}")
-            {:error, :unexpected_error, error}
-
           {:error, error} ->
             Logger.error("Unexpected error: #{inspect(error)}")
             {:error, :unexpected_error, error}
@@ -43,7 +39,7 @@ defmodule Statsig.APIClient do
 
   def push_logs(logs) do
     case api_key() do
-      {:ok, key} = key_result ->
+      {:ok, key} ->
         base_url = api_url(@default_logging_api_url)
 
         url =
@@ -52,12 +48,12 @@ defmodule Statsig.APIClient do
           |> URI.to_string()
 
         case Req.post(url: url, json: %{events: logs}, headers: headers(key)) do
-          {:ok, %{status: code}} when code < 300 ->
+          {:ok, %{status: status}} when status in 200..299 ->
             {:ok, []}
 
           {:ok, response} ->
             Logger.error(
-              "Failed to push logs: status #{response.status}, body: #{inspect(response.body)}"
+              "Failed to push logs: status #{response.status}, body: #{inspect(String.slice(inspect(response.body), 0, 200))}"
             )
 
             {:error, logs}
@@ -76,15 +72,13 @@ defmodule Statsig.APIClient do
   defp api_key() do
     case Application.get_env(:statsig, :api_key) do
       nil ->
-        Logger.error("Statsig API key is not configured")
-        {:error, "API key not configured"}
+        raise "Statsig API key is not configured. Please set the :api_key in your :statsig configuration."
 
       key when is_binary(key) ->
         {:ok, key}
 
       key ->
-        Logger.error("Invalid Statsig API key format: #{inspect(key)}")
-        {:error, "Invalid API key format"}
+        raise "Invalid Statsig API key format: #{inspect(key)}. API key must be a string."
     end
   end
 
@@ -99,7 +93,7 @@ defmodule Statsig.APIClient do
       {"Content-Type", "application/json"},
       {"STATSIG-SDK-VERSION", "0.0.1"},
       {"STATSIG-SDK-TYPE", "elixir-server"},
-      {"STATSIG-CLIENT-TIME", :os.system_time(:millisecond)}
+      {"STATSIG-CLIENT-TIME", System.system_time(:millisecond)}
     ]
   end
 end
