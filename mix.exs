@@ -14,14 +14,19 @@ defmodule Statsig.MixProject do
 
   # Run "mix help compile.app" to learn about applications.
   def application do
-    [
-      mod: {Statsig.Application, []},
-      extra_applications: [:logger, :jason]
-    ]
+    case Mix.env() do
+      :test ->
+        [extra_applications: [:logger, :jason]]
+      _ ->
+        [
+          mod: {Statsig.Application, []},
+          extra_applications: [:logger, :jason]
+        ]
+    end
   end
 
   # Specifies which paths to compile per environment.
-  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(:test), do: ["lib", "test/support", "test/statsig"]
   defp elixirc_paths(_), do: ["lib"]
 
   # Run "mix help deps" to learn about dependencies.
