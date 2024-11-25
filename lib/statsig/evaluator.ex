@@ -89,7 +89,7 @@ defmodule Statsig.Evaluator do
             result
             | result: final_result,
               value: Map.get(rule, "returnValue"),
-              reason: :rule_match
+              reason: :rule_match,
           },
           fn r, final ->
             %Result{final | exposures: r.exposures ++ final.exposures}
