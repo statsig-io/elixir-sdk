@@ -58,7 +58,7 @@ defmodule Statsig.Logging do
     defp api_client, do: Application.get_env(:statsig, :api_client, Statsig.APIClient)
 
     def schedule_flush(state) do
-      if state.flush_timer != nil do
+      if state.flush_timer do
         Process.cancel_timer(state.flush_timer)
       end
       timer = Process.send_after(Statsig.Logging, :flush_events, state.flush_interval)

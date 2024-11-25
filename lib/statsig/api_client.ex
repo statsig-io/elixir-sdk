@@ -52,8 +52,9 @@ defmodule Statsig.APIClient do
             {:ok, []}
 
           {:ok, response} ->
+            truncated_body = response.body |> inspect() |> String.slice(0..200)
             Logger.error(
-              "Failed to push logs: status #{response.status}, body: #{inspect(String.slice(inspect(response.body), 0, 200))}"
+              "Failed to push logs: status #{response.status}, body: #{truncated_body}"
             )
 
             {:error, logs}

@@ -1,4 +1,8 @@
 defmodule Statsig do
+
+  defdelegate log_event(event), to: Statsig.Logging
+  defdelegate flush(), to: Statsig.Logging
+
   def check_gate(user, gate) do
     user = Statsig.Utils.get_user_with_env(user)
 
@@ -28,8 +32,6 @@ defmodule Statsig do
     get_config(user, experiment)
   end
 
-  defdelegate log_event(event), to: Statsig.Logging
-
   def log_event(user, event_name, value, metadata) do
     user = Statsig.Utils.get_user_with_env(user)
 
@@ -43,8 +45,6 @@ defmodule Statsig do
 
     log_event(event)
   end
-
-  defdelegate flush(), to: Statsig.Logging
 
   defp log_exposures(user, [%{"gate" => c, "ruleID" => r} | secondary], :config) do
     primary = %{
