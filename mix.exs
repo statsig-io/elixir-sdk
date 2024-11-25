@@ -15,7 +15,8 @@ defmodule Statsig.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger, :jason],
+      mod: {Statsig.Application, []},
+      extra_applications: [:logger, :jason]
     ]
   end
 
@@ -28,7 +29,7 @@ defmodule Statsig.MixProject do
     [
       {:req, "~> 0.5"},
       {:jason, "~> 1.2"},
-      {:ua_parser, "~> 1.8"},
+      {:ua_parser, "~> 1.8"}
     ]
   end
 end

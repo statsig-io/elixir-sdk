@@ -1,55 +1,100 @@
 defmodule Statsig.APIClient do
   require Logger
-  @default_logging_api_url "https://statsigapi.net/v1/"
-  @default_config_specs_api_url "https://api.statsigcdn.com/v1/"
+  @default_logging_api_url "https://statsigapi.net/v1"
+  @default_config_specs_api_url "https://api.statsigcdn.com/v1"
 
-  def download_config_specs(api_key, since_time \\ 0) do
-    base_url = get_api_url(@default_config_specs_api_url)
-    url = "#{base_url}download_config_specs/#{api_key}.json?sinceTime=#{since_time}"
+  def download_config_specs(since_time \\ 0) do
+    case api_key() do
+      {:ok, key} ->
+        base_url = api_url(@default_config_specs_api_url)
 
-    result = Req.get(url: url, headers: headers(api_key))
+        url =
+          URI.new!(base_url)
+          |> URI.append_path(Path.join("/download_config_specs", key <> ".json"))
+          |> URI.append_query(URI.encode_query(sinceTime: to_string(since_time)))
+          |> URI.to_string()
 
-    case result do
-      {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
-        {:ok, body}
-      {:ok, %Req.Response{status: status, body: body}} ->
-        Logger.error("HTTP error: status #{status}, body: #{inspect(body)}")
-        {:error, :http_error, status}
-      {:error, :unexpected_error, error} ->
-        Logger.error("Unexpected error: #{inspect(error)}")
-        {:error, :unexpected_error, error}
-      {:error, error} ->
-        Logger.error("Unexpected error: #{inspect(error)}")
-        {:error, :unexpected_error, error}
+        case Req.get(url) do
+          {:ok, %Req.Response{status: status, body: %{} = body}} when status in 200..299 ->
+            {:ok, body}
+
+          {:ok, %Req.Response{status: status} = response} when status in 200..299 ->
+            Logger.error("Invalid response format, expected map got: #{inspect(response.body)}")
+            {:error, {:invalid_response_format, response.body}}
+
+          {:ok, %Req.Response{status: status, body: body}} ->
+            Logger.error("HTTP error: status #{status}, body: #{inspect(body)}")
+            {:error, :http_error, status}
+
+          {:error, error} ->
+            Logger.error("Unexpected error: #{inspect(error)}")
+            {:error, :unexpected_error, error}
+        end
+
+      {:error, reason} ->
+        Logger.error("Failed to get API key: #{reason}")
+        {:error, :missing_api_key, reason}
     end
   end
 
-  def push_logs(api_key, logs) do
-    base_url = get_api_url(@default_logging_api_url)
-    url = "#{base_url}rgstr"
-    result = Req.post(
-      url: url,
-      json: %{"events" => logs},
-      headers: headers(api_key)
-    ) |> case do
-      {:ok, %{status: code}} when code < 300 -> {:ok, []}
-      _ -> {:error, logs}
+  def push_logs(logs) do
+    case api_key() do
+      {:ok, key} ->
+        base_url = api_url(@default_logging_api_url)
+
+        url =
+          URI.new!(base_url)
+          |> URI.append_path("/rgstr")
+          |> URI.to_string()
+
+        case Req.post(url: url, json: %{events: logs}, headers: headers(key)) do
+          {:ok, %{status: status}} when status in 200..299 ->
+            {:ok, []}
+
+          {:ok, response} ->
+            truncated_body = response.body |> inspect() |> String.slice(0..200)
+            Logger.error(
+              "Failed to push logs: status #{response.status}, body: #{truncated_body}"
+            )
+
+            {:error, logs}
+
+          {:error, error} ->
+            Logger.error("Failed to push logs: #{inspect(error)}")
+            {:error, logs}
+        end
+
+      {:error, reason} ->
+        Logger.error("Failed to get API key: #{reason}")
+        {:error, logs}
     end
   end
 
-  defp get_api_url(default_url) do
+  defp api_key() do
+    case Application.get_env(:statsig, :api_key) do
+      nil ->
+        raise "Statsig API key is not configured. Please set the :api_key in your :statsig configuration."
+
+      key when is_binary(key) ->
+        {:ok, key}
+
+      key ->
+        raise "Invalid Statsig API key format: #{inspect(key)}. API key must be a string."
+    end
+  end
+
+  defp api_url(default_url) do
     url = Application.get_env(:statsig, :api_url, default_url)
     if String.ends_with?(url, "/"), do: url, else: url <> "/"
   end
 
-  defp headers(api_key) do
+  defp headers(key) do
     [
-      {"STATSIG-API-KEY", api_key},
+      {"STATSIG-API-KEY", key},
       {"Content-Type", "application/json"},
       {"STATSIG-SDK-VERSION", "0.0.1"},
       {"STATSIG-SDK-TYPE", "elixir-server"},
-      {"STATSIG-CLIENT-TIME", :os.system_time(:millisecond)}
+      {"STATSIG-CLIENT-TIME", System.system_time(:millisecond)}
     ]
   end
-
 end
