@@ -1,4 +1,7 @@
 defmodule Statsig.Evaluator do
+
+  alias Statsig.User
+
   @unsupported ["ip_based"]
 
   alias Statsig.EvaluationResult
@@ -422,24 +425,31 @@ defmodule Statsig.Evaluator do
     hash
   end
 
-  defp get_user_id(user, "userID"), do: try_get_with_lower(user, "userID") |> to_string()
+  defp get_user_id(%User{userID: id}, "userID"), do: to_string(id)
 
-  defp get_user_id(user, prop),
-    do: try_get_with_lower(Map.get(user, "customIDs", %{}), prop) |> to_string()
+  defp get_user_id(%User{customIDs: custom_ids}, prop),
+    do: try_get_with_lower(custom_ids, prop) |> to_string()
 
-  # this is kind of messy, but it should work for now
-  defp get_user_field(user, prop) do
-    case try_get_with_lower(user, prop) do
-      nil -> try_get_with_lower(Map.get(user, "custom", %{}), prop)
+  defp get_user_field(%User{} = user, prop) do
+    case try_get_with_lower(%{
+      user.userID => user.userID,
+      "email" => user.email,
+      "ip" => user.ip,
+      "userAgent" => user.userAgent,
+      "country" => user.country,
+      "locale" => user.locale,
+      "appVersion" => user.appVersion
+    }, prop) do
+      nil -> try_get_with_lower(user.custom || %{}, prop)
       found -> found
     end
     |> case do
-      nil -> try_get_with_lower(Map.get(user, "privateAttributes", %{}), prop)
+      nil -> try_get_with_lower(user.privateAttributes || %{}, prop)
       found -> found
     end
   end
 
-  defp get_env_field(%{"statsigEnvironment" => env}, field),
+  defp get_env_field(%User{statsigEnvironment: env}, field) when not is_nil(env),
     do: try_get_with_lower(env, field) |> to_string()
 
   defp get_env_field(_, _), do: nil

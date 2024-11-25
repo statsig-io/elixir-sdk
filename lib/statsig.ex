@@ -1,6 +1,6 @@
 defmodule Statsig do
-
   alias Statsig.EvaluationResult
+  alias Statsig.User
 
   defdelegate log_event(event), to: Statsig.Logging
   defdelegate flush(), to: Statsig.Logging
@@ -34,7 +34,7 @@ defmodule Statsig do
     get_config(user, experiment)
   end
 
-  def log_event(user, event_name, value, metadata) do
+  def log_event(%User{} = user, event_name, value, metadata) do
     user = Statsig.Utils.get_user_with_env(user)
 
     event = %{
@@ -48,7 +48,7 @@ defmodule Statsig do
     log_event(event)
   end
 
-  defp log_exposures(user, %EvaluationResult{} = result, :config) do
+  defp log_exposures(%User{} = user, %EvaluationResult{} = result, :config) do
     [exposure | secondary] = result.exposures
 
     primary = %{
@@ -65,9 +65,8 @@ defmodule Statsig do
     log_event(event)
   end
 
-  defp log_exposures(user, %EvaluationResult{} = result, type) do
+  defp log_exposures(%User{} = user, %EvaluationResult{} = result, type) do
     [primary | secondary] = result.exposures
-
     event =
       base_event(user, secondary, type)
       |> Map.put(:metadata, primary)
@@ -75,7 +74,7 @@ defmodule Statsig do
     log_event(event)
   end
 
-  defp base_event(user, secondary, type) do
+  defp base_event(%User{} = user, secondary, type) do
     user = Statsig.Utils.sanitize_user(user)
 
     %{
