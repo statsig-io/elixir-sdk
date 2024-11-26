@@ -14,7 +14,7 @@ defmodule Statsig.APIClient do
           |> URI.append_query(URI.encode_query(sinceTime: to_string(since_time)))
           |> URI.to_string()
 
-        case Req.get(url) do
+        case Req.get(url: url, headers: headers(key)) do
           {:ok, %Req.Response{status: status, body: %{} = body}} when status in 200..299 ->
             {:ok, body}
 
