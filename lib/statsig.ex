@@ -46,10 +46,11 @@ defmodule Statsig do
     log_event(event)
   end
 
-  defp log_exposures(user, [%{"gate" => c, "ruleID" => r} | secondary], :config) do
+  defp log_exposures(user, [%{"gate" => c, "ruleID" => r, "gateValue" => v} | secondary], :config) do
     primary = %{
       "config" => c,
-      "ruleID" => r
+      "ruleID" => r,
+      "rulePassed" => v
     }
 
     event =
