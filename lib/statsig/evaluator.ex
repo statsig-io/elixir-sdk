@@ -1,23 +1,10 @@
 defmodule Statsig.Evaluator do
   @unsupported ["ip_based"]
 
-  defmodule Result do
-    defstruct exposures: [],
-              secondary_exposures: [],
-              raw_result: false,
-              result: false,
-              reason: nil,
-              rule: %{},
-              value: nil
-  end
-
+  alias Statsig.EvaluationResult
   defmodule Context do
     defstruct spec: %{}, server: nil
   end
-
-  # this doesn't add the top-level exposure properly
-  def eval(user, spec) when is_map(spec),
-    do: eval_and_add_exposure(user, spec, %Context{spec: Map.get(spec, "name")})
 
   def eval(user, name, type) do
     Statsig.Configs.lookup(name, type)
@@ -31,19 +18,19 @@ defmodule Statsig.Evaluator do
   end
 
   defp eval_and_add_exposure(_user, nil, name),
-    do: %Result{
+    do: %EvaluationResult{
       result: false,
-      rule: %{"id" => "Unrecognized"},
+      rule: %{id: "Unrecognized"},
       reason: :not_found,
       exposures: [
-        %{"gate" => name, "gateValue" => "false", "ruleID" => "Unrecognized", value: %{}}
+        %{gate: name, gateValue: "false", ruleID: "Unrecognized", value: %{}}
       ]
     }
 
   # don't add an exposure for segments (which are represented as gates)
   defp eval_and_add_exposure(user, ctx, <<"segment:", _::binary>>) do
     result = do_eval(user, ctx)
-    %Result{result | exposures: result.exposures |> Enum.reverse() |> Enum.uniq()}
+    %EvaluationResult{result | exposures: result.exposures |> Enum.reverse() |> Enum.uniq()}
   end
 
   defp eval_and_add_exposure(user, ctx, name) do
@@ -51,18 +38,19 @@ defmodule Statsig.Evaluator do
 
     exposures = [
       %{
-        "gate" => name,
-        "gateValue" => to_string(result.result),
-        "ruleID" => Map.get(result.rule, "id")
+        gate: name,
+        gateValue: to_string(result.result),
+        ruleID: Map.get(result.rule, "id"),
+        configVersion: to_string(Map.get(ctx.spec, "version", ""))
       }
       | Enum.reverse(result.exposures)
     ]
 
-    %Result{result | exposures: Enum.uniq(exposures)}
+    %EvaluationResult{result | exposures: Enum.uniq(exposures)}
   end
 
   defp do_eval(_user, %Context{spec: %{"enabled" => false, "defaultValue" => default}}),
-    do: %Result{value: default, rule: %{"id" => "disabled"}, reason: :disabled}
+    do: %EvaluationResult{value: default, rule: %{id: "disabled"}, reason: :disabled}
 
   defp do_eval(user, %Context{spec: %{"rules" => rules}} = ctx),
     do: eval_rules(user, rules, ctx, [])
@@ -70,9 +58,9 @@ defmodule Statsig.Evaluator do
   defp eval_rules(_user, [], %Context{spec: %{"defaultValue" => default}}, results) do
     Enum.reduce(
       results,
-      %Result{result: false, value: default, rule: %{"id" => "default"}, reason: :no_rule_match},
+      %EvaluationResult{result: false, value: default, rule: %{id: "default"}, reason: :no_rule_match},
       fn r, final ->
-        %Result{final | exposures: r.exposures ++ final.exposures}
+        %EvaluationResult{final | exposures: r.exposures ++ final.exposures}
       end
     )
   end
@@ -80,19 +68,19 @@ defmodule Statsig.Evaluator do
   # only evaluate as many rules as we need to to find a matching one
   defp eval_rules(user, [rule | rest], ctx, acc) do
     case eval_one_rule(user, rule, ctx) do
-      %Result{result: true} = result ->
+      %EvaluationResult{result: true} = result ->
         final_result = eval_pass_percent(user, rule, ctx)
 
         Enum.reduce(
           acc,
-          %Result{
+          %EvaluationResult{
             result
             | result: final_result,
               value: Map.get(rule, "returnValue"),
               reason: :rule_match
           },
           fn r, final ->
-            %Result{final | exposures: r.exposures ++ final.exposures}
+            %EvaluationResult{final | exposures: r.exposures ++ final.exposures}
           end
         )
 
@@ -106,8 +94,8 @@ defmodule Statsig.Evaluator do
 
     # all conditions must match, and we should only include the rule if all match
     result =
-      Enum.reduce(results, %Result{result: true, raw_result: true}, fn curr, acc ->
-        %Result{
+      Enum.reduce(results, %EvaluationResult{result: true, raw_result: true}, fn curr, acc ->
+        %EvaluationResult{
           result: curr.result && acc.result,
           raw_result: curr.raw_result && acc.raw_result,
           value: acc.value || curr.value,
@@ -116,7 +104,7 @@ defmodule Statsig.Evaluator do
       end)
 
     if result.raw_result || result.result,
-      do: %Result{result | rule: rule},
+      do: %EvaluationResult{result | rule: rule},
       else: result
   end
 
@@ -133,7 +121,7 @@ defmodule Statsig.Evaluator do
          acc
        ),
        do: [
-         %Result{
+         %EvaluationResult{
            result: true,
            raw_result: true,
            value: Map.get(rule, "returnValue"),
@@ -152,7 +140,7 @@ defmodule Statsig.Evaluator do
     result =
       case eval(user, gate, :gate) do
         %{result: true} = result ->
-          %Result{
+          %EvaluationResult{
             result
             | value: Map.get(rule, "returnValue"),
               rule: rule
@@ -179,7 +167,7 @@ defmodule Statsig.Evaluator do
         do: %{},
         else: rule
 
-    result = %Result{
+    result = %EvaluationResult{
       result
       | result: !result.result,
         raw_result: !result.raw_result,
@@ -195,7 +183,7 @@ defmodule Statsig.Evaluator do
        when type in @unsupported do
     IO.puts("unsupported type: #{type}")
     # not sure why raw_result is true here, but that's what the erlang client does...?
-    eval_conditions(user, rest, rule, ctx, [%Result{result: false, raw_result: true} | acc])
+    eval_conditions(user, rest, rule, ctx, [%EvaluationResult{result: false, raw_result: true} | acc])
   end
 
   defp eval_conditions(
@@ -212,10 +200,10 @@ defmodule Statsig.Evaluator do
         # is there a reason we don't throw an exposure in here right now...?
         # should an exposure be logged any time we match a condition instead of only when we make it through the entire gate?
         true ->
-          %Result{result: true, raw_result: true, value: Map.get(rule, "returnValue"), rule: rule}
+          %EvaluationResult{result: true, raw_result: true, value: Map.get(rule, "returnValue"), rule: rule}
 
         r ->
-          %Result{result: r, raw_result: false, value: Map.get(rule, "returnValue"), rule: rule}
+          %EvaluationResult{result: r, raw_result: false, value: Map.get(rule, "returnValue"), rule: rule}
       end
 
     eval_conditions(user, rest, rule, ctx, [result | acc])
