@@ -22,11 +22,16 @@ defmodule Statsig do
     result = Statsig.Evaluator.eval(user, config, :config)
     log_exposures(user, result, :config)
 
-    # TODO - could probably hand back a Result struct
     case result do
       %{reason: :not_found} -> {:error, :not_found}
-      # TODO - this be {:ok, result}
-      _ -> %{rule_id: Map.get(result.rule, "id"), value: result.value}
+      _ -> {:ok, Statsig.DynamicConfig.new(
+        config,
+        result.value,
+        Map.get(result.rule, "id"),
+        Map.get(result.rule, "groupName"),
+        Map.get(result.rule, "idType"),
+        result.exposures
+      )}
     end
   end
 
