@@ -1,5 +1,7 @@
 defmodule Statsig do
 
+  alias Statsig.EvaluationResult
+
   defdelegate log_event(event), to: Statsig.Logging
   defdelegate flush(), to: Statsig.Logging
 
@@ -7,7 +9,7 @@ defmodule Statsig do
     user = Statsig.Utils.get_user_with_env(user)
 
     result = Statsig.Evaluator.eval(user, gate, :gate)
-    log_exposures(user, result.exposures, :gate)
+    log_exposures(user, result, :gate)
 
     case result do
       %{reason: :not_found} -> {:error, :not_found}
@@ -18,7 +20,7 @@ defmodule Statsig do
   def get_config(user, config) do
     user = Statsig.Utils.get_user_with_env(user)
     result = Statsig.Evaluator.eval(user, config, :config)
-    log_exposures(user, result.exposures, :config)
+    log_exposures(user, result, :config)
 
     # TODO - could probably hand back a Result struct
     case result do
@@ -46,24 +48,29 @@ defmodule Statsig do
     log_event(event)
   end
 
-  defp log_exposures(user, [%{"gate" => c, "ruleID" => r, "gateValue" => v} | secondary], :config) do
+  defp log_exposures(user, %EvaluationResult{} = result, :config) do
+    [exposure | secondary] = result.exposures
+
     primary = %{
-      "config" => c,
-      "ruleID" => r,
-      "rulePassed" => v
+      config: exposure.gate,
+      ruleID: exposure.ruleID,
+      rulePassed: exposure.gateValue,
     }
+    |> Map.merge(if Map.get(exposure, :configVersion), do: %{configVersion: exposure.configVersion}, else: %{})
 
     event =
       base_event(user, secondary, :config)
-      |> Map.put("metadata", primary)
+      |> Map.put(:metadata, primary)
 
     log_event(event)
   end
 
-  defp log_exposures(user, [primary | secondary], type) do
+  defp log_exposures(user, %EvaluationResult{} = result, type) do
+    [primary | secondary] = result.exposures
+
     event =
       base_event(user, secondary, type)
-      |> Map.put("metadata", primary)
+      |> Map.put(:metadata, primary)
 
     log_event(event)
   end
