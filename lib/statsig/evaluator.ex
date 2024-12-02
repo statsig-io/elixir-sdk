@@ -425,32 +425,35 @@ defmodule Statsig.Evaluator do
     hash
   end
 
-  defp get_user_id(%User{userID: id}, "userID"), do: to_string(id)
+  defp get_user_id(%User{} = user, "userID"), do: to_string(user.user_id)
 
-  defp get_user_id(%User{customIDs: custom_ids}, prop),
-    do: try_get_with_lower(custom_ids, prop) |> to_string()
+  defp get_user_id(%User{} = user, prop),
+    do: try_get_with_lower(user.custom_ids || %{}, prop) |> to_string()
 
   defp get_user_field(%User{} = user, prop) do
     case try_get_with_lower(%{
-      user.userID => user.userID,
+      user.userID => user.user_id,
       "email" => user.email,
       "ip" => user.ip,
-      "userAgent" => user.userAgent,
+      "userAgent" => user.user_agent,
       "country" => user.country,
       "locale" => user.locale,
-      "appVersion" => user.appVersion
+      "appVersion" => user.app_version
     }, prop) do
       nil -> try_get_with_lower(user.custom || %{}, prop)
       found -> found
     end
     |> case do
-      nil -> try_get_with_lower(user.privateAttributes || %{}, prop)
+      nil -> try_get_with_lower(user.private_attributes || %{}, prop)
       found -> found
     end
   end
 
-  defp get_env_field(%User{statsigEnvironment: env}, field) when not is_nil(env),
-    do: try_get_with_lower(env, field) |> to_string()
+  defp get_env_field(%User{} = user, field) do
+    user.statsig_environment
+    |> Map.get(field)
+    |> to_string()
+  end
 
   defp get_env_field(_, _), do: nil
 

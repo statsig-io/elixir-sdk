@@ -14,27 +14,25 @@ defmodule Statsig.MixProject do
 
   # Run "mix help compile.app" to learn about applications.
   def application do
-    case Mix.env() do
-      :test ->
-        [extra_applications: [:logger, :jason]]
-      _ ->
-        [
-          mod: {Statsig.Application, []},
-          extra_applications: [:logger, :jason]
-        ]
-    end
+    [
+      mod: {Statsig.Application, []},
+      extra_applications: [:logger]
+    ]
   end
 
   # Specifies which paths to compile per environment.
-  defp elixirc_paths(:test), do: ["lib", "test/support", "test/statsig"]
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
       {:req, "~> 0.5"},
-      {:jason, "~> 1.2"},
       {:ua_parser, "~> 1.8"}
     ]
+  end
+
+  defp aliases() do
+    [test: "test --no-start"]
   end
 end

@@ -67,6 +67,7 @@ defmodule Statsig do
 
   defp log_exposures(%User{} = user, %EvaluationResult{} = result, type) do
     [primary | secondary] = result.exposures
+
     event =
       base_event(user, secondary, type)
       |> Map.put(:metadata, primary)
