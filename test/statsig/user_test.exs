@@ -43,8 +43,9 @@ defmodule Statsig.UserTest do
       json = Jason.encode!(user)
       decoded = Jason.decode!(json)
 
-      assert decoded["user_id"] == "123"
+      assert decoded["userID"] == "123"
       assert decoded["email"] == "test@example.com"
+      refute Map.has_key?(decoded, "privateAttributes")
       refute Map.has_key?(decoded, "private_attributes")
     end
 
@@ -63,15 +64,15 @@ defmodule Statsig.UserTest do
       json = Jason.encode!(user)
       decoded = Jason.decode!(json)
 
-      assert decoded["user_id"] == "123"
+      assert decoded["userID"] == "123"
       assert decoded["email"] == "test@example.com"
       assert decoded["custom"] == %{"is_employee" => true}
-      assert decoded["custom_ids"] == %{"employee_id" => "456"}
+      assert decoded["customIDs"] == %{"employee_id" => "456"}
       assert decoded["ip"] == "1.2.3.4"
-      assert decoded["user_agent"] == "Mozilla"
+      assert decoded["userAgent"] == "Mozilla"
       assert decoded["country"] == "US"
       assert decoded["locale"] == "en-US"
-      assert decoded["app_version"] == "1.0.0"
+      assert decoded["appVersion"] == "1.0.0"
     end
   end
 end
