@@ -43,7 +43,7 @@ defmodule Statsig.Evaluator do
       %{
         gate: name,
         gateValue: to_string(result.result),
-        ruleID: Map.get(result.rule, "id"),
+        ruleID: result.rule["id"],
         configVersion: to_string(Map.get(ctx.spec, "version", ""))
       }
       | Enum.reverse(result.exposures)
@@ -53,7 +53,7 @@ defmodule Statsig.Evaluator do
   end
 
   defp do_eval(_user, %Context{spec: %{"enabled" => false, "defaultValue" => default}}),
-    do: %EvaluationResult{value: default, rule: %{id: "disabled"}, reason: :disabled}
+    do: %EvaluationResult{value: default, rule: %{"id" => "disabled"}, reason: :disabled}
 
   defp do_eval(user, %Context{spec: %{"rules" => rules}} = ctx),
     do: eval_rules(user, rules, ctx, [])
@@ -61,7 +61,7 @@ defmodule Statsig.Evaluator do
   defp eval_rules(_user, [], %Context{spec: %{"defaultValue" => default}}, results) do
     Enum.reduce(
       results,
-      %EvaluationResult{result: false, value: default, rule: %{id: "default"}, reason: :no_rule_match},
+      %EvaluationResult{result: false, value: default, rule: %{"id" => "default"}, reason: :no_rule_match},
       fn r, final ->
         %EvaluationResult{final | exposures: r.exposures ++ final.exposures}
       end

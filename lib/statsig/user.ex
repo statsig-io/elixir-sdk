@@ -4,7 +4,7 @@ defmodule Statsig.User do
             :ip, :user_agent, :country, :locale, :app_version, :statsig_environment]
 
   @type custom_value :: String.t() | number() | boolean() | nil
-  @type custom_attributes :: %{optional(String.t()) => custom_value()}
+  @type custom_attributes :: %{String.t() => custom_value()}
 
   @type t :: %__MODULE__{
     user_id: String.t() | nil,
