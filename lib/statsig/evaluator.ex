@@ -434,8 +434,7 @@ defmodule Statsig.Evaluator do
   end
 
   defp get_user_field(%User{} = user, prop) do
-    prop = String.downcase(prop)
-    case prop do
+    case String.downcase(prop) do
       "userid" -> user.user_id
       "email" -> user.email
       "ip" -> user.ip
@@ -445,10 +444,7 @@ defmodule Statsig.Evaluator do
       "appversion" -> user.app_version
       _ ->
         # Check custom fields if not found in main user fields
-        case try_get_with_lower(user.custom || %{}, prop) do
-          nil -> try_get_with_lower(user.private_attributes || %{}, prop)
-          found -> found
-        end
+        try_get_with_lower(user.custom || %{}, prop) || try_get_with_lower(user.private_attributes || %{}, prop)
     end
   end
 
@@ -461,10 +457,8 @@ defmodule Statsig.Evaluator do
   end
 
   defp try_get_with_lower(obj, prop) do
-    lower = String.downcase(prop)
-
     case Map.get(obj, prop) do
-      x when x == nil or x == [] or x == "" -> Map.get(obj, lower)
+      x when x == nil -> Map.get(obj, String.downcase(prop))
       x -> x
     end
   end

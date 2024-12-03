@@ -49,11 +49,12 @@ defmodule Statsig.User do
       |> Map.from_struct()
       |> Map.delete(:private_attributes)
       |> Map.update!(:custom_ids, fn custom_ids ->
-        custom_ids && Enum.into(custom_ids, %{})
+        custom_ids && Map.new(custom_ids)
       end)
-      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-      |> Enum.map(fn {k, v} -> {Statsig.User.encode_as(k), v} end)
-      |> Map.new()
+      |> Enum.reject(&match?({_, nil},&1))
+      |> Map.new(fn {key, value} ->
+        {Statsig.User.encode_as(key), value}
+        end)
       |> Jason.Encode.map(opts)
     end
   end
