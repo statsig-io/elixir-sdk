@@ -35,11 +35,10 @@ defmodule Statsig.UserTest do
 
   describe "JSON serialization" do
     test "excludes private_attributes when encoding to JSON" do
-      user = User.new(%{
-        "user_id" => "123",
-        "email" => "test@example.com",
-        "private_attributes" => %{"secret" => "value"}
-      })
+      user = User.new("123", [
+        email: "test@example.com",
+        private_attributes: %{"secret" => "value"}
+      ])
 
       json = Jason.encode!(user)
       decoded = Jason.decode!(json)
@@ -50,17 +49,16 @@ defmodule Statsig.UserTest do
     end
 
     test "includes all other fields when encoding to JSON" do
-      user = User.new(%{
-        "user_id" => "123",
-        "email" => "test@example.com",
-        "custom" => %{"is_employee" => true},
-        "custom_ids" => [employee_id: "456"],
-        "ip" => "1.2.3.4",
-        "user_agent" => "Mozilla",
-        "country" => "US",
-        "locale" => "en-US",
-        "app_version" => "1.0.0"
-      })
+      user = User.new("123", [
+        email: "test@example.com",
+        custom: %{"is_employee" => true},
+        custom_ids: [employee_id: "456"],
+        ip: "1.2.3.4",
+        user_agent: "Mozilla",
+        country: "US",
+        locale: "en-US",
+        app_version: "1.0.0"
+      ])
 
       json = Jason.encode!(user)
       decoded = Jason.decode!(json)

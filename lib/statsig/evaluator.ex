@@ -427,35 +427,37 @@ defmodule Statsig.Evaluator do
 
   defp get_user_id(%User{} = user, "userID"), do: to_string(user.user_id)
 
-  defp get_user_id(%User{} = user, prop),
-    do: try_get_with_lower(user.custom_ids || %{}, prop) |> to_string()
+  defp get_user_id(%User{} = user, prop) do
+    (user.custom_ids || [])
+    |> Keyword.get(String.to_atom(prop))
+    |> to_string()
+  end
 
   defp get_user_field(%User{} = user, prop) do
-    case try_get_with_lower(%{
-      user.userID => user.user_id,
-      "email" => user.email,
-      "ip" => user.ip,
-      "userAgent" => user.user_agent,
-      "country" => user.country,
-      "locale" => user.locale,
-      "appVersion" => user.app_version
-    }, prop) do
-      nil -> try_get_with_lower(user.custom || %{}, prop)
-      found -> found
-    end
-    |> case do
-      nil -> try_get_with_lower(user.private_attributes || %{}, prop)
-      found -> found
+    case prop do
+      "userID" -> user.user_id
+      "email" -> user.email
+      "ip" -> user.ip
+      "userAgent" -> user.user_agent
+      "country" -> user.country
+      "locale" -> user.locale
+      "appVersion" -> user.app_version
+      _ ->
+        # Check custom fields if not found in main user fields
+        case try_get_with_lower(user.custom || %{}, prop) do
+          nil -> try_get_with_lower(user.private_attributes || %{}, prop)
+          found -> found
+        end
     end
   end
+
+  defp get_env_field(%User{statsig_environment: nil}, _field), do: nil
 
   defp get_env_field(%User{} = user, field) do
     user.statsig_environment
     |> Map.get(field)
     |> to_string()
   end
-
-  defp get_env_field(_, _), do: nil
 
   defp try_get_with_lower(obj, prop) do
     lower = String.downcase(prop)

@@ -1,16 +1,7 @@
 defmodule Statsig.User do
-  @derive {Jason.Encoder, only: [
-    :user_id,
-    :custom_ids,
-    :email,
-    :ip,
-    :user_agent,
-    :country,
-    :locale,
-    :app_version,
-    :custom,
-    :statsig_environment
-  ]}
+  @derive {Jason.Encoder, except: [:private_attributes]}
+  defstruct [:user_id, :email, :custom, :custom_ids, :private_attributes,
+            :ip, :user_agent, :country, :locale, :app_version, :statsig_environment]
 
   @type custom_value :: String.t() | number() | boolean() | nil
   @type custom_attributes :: %{optional(String.t()) => custom_value()}
@@ -29,20 +20,6 @@ defmodule Statsig.User do
     statsig_environment: map() | nil
   }
 
-  defstruct [
-    :user_id,
-    :custom_ids,
-    :email,
-    :ip,
-    :user_agent,
-    :country,
-    :locale,
-    :app_version,
-    :custom,
-    :private_attributes,
-    :statsig_environment
-  ]
-
   def new(user_id_or_custom_ids, params \\ [])
 
   def new(custom_ids = [_ | _], params) do
@@ -55,15 +32,6 @@ defmodule Statsig.User do
 
   def new(_, _), do: raise("You must provide a user id or custom ids")
 
-  defp new_from_params(params) do
-    params =
-      Keyword.new(params, fn
-        {key, _v} = key_and_value when is_atom(key) -> key_and_value
-        {key, value} when is_binary(key) -> {String.to_existing_atom(key), value}
-      end)
-    struct(__MODULE__, params)
-  end
-
   def encode_as(key) when is_atom(key) do
     case key do
       :user_id -> "userID"
@@ -72,6 +40,21 @@ defmodule Statsig.User do
       :app_version -> "appVersion"
       :statsig_environment -> "statsigEnvironment"
       _ -> key |> Atom.to_string()
+    end
+  end
+
+  defimpl Jason.Encoder do
+    def encode(user, opts) do
+      user
+      |> Map.from_struct()
+      |> Map.delete(:private_attributes)
+      |> Map.update!(:custom_ids, fn custom_ids ->
+        custom_ids && Enum.into(custom_ids, %{})
+      end)
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Enum.map(fn {k, v} -> {Statsig.User.encode_as(k), v} end)
+      |> Map.new()
+      |> Jason.Encode.map(opts)
     end
   end
 end
