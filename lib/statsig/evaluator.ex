@@ -434,14 +434,15 @@ defmodule Statsig.Evaluator do
   end
 
   defp get_user_field(%User{} = user, prop) do
+    prop = String.downcase(prop)
     case prop do
-      "userID" -> user.user_id
+      "userid" -> user.user_id
       "email" -> user.email
       "ip" -> user.ip
-      "userAgent" -> user.user_agent
+      "useragent" -> user.user_agent
       "country" -> user.country
       "locale" -> user.locale
-      "appVersion" -> user.app_version
+      "appversion" -> user.app_version
       _ ->
         # Check custom fields if not found in main user fields
         case try_get_with_lower(user.custom || %{}, prop) do
