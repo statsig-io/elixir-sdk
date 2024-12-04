@@ -39,15 +39,20 @@ defmodule Statsig.Evaluator do
   defp eval_and_add_exposure(user, ctx, name) do
     result = do_eval(user, ctx)
 
-    exposures = [
-      %{
-        gate: name,
-        gateValue: to_string(result.result),
-        ruleID: result.rule["id"],
-        configVersion: to_string(Map.get(ctx.spec, "version", ""))
-      }
-      | Enum.reverse(result.exposures)
-    ]
+    # Only include configVersion in the first exposure
+    first_exposure = %{
+      gate: name,
+      gateValue: to_string(result.result),
+      ruleID: result.rule["id"],
+      configVersion: to_string(Map.get(ctx.spec, "version", ""))
+    }
+
+    # Other exposures don't include configVersion
+    exposures =
+      [first_exposure |
+       Enum.map(Enum.reverse(result.exposures), fn exp ->
+         Map.delete(exp, :configVersion)
+       end)]
 
     %EvaluationResult{result | exposures: Enum.uniq(exposures)}
   end
@@ -184,7 +189,7 @@ defmodule Statsig.Evaluator do
   # ip_based compares are unsupported for now
   defp eval_conditions(user, [%{"type" => type} | rest], rule, ctx, acc)
        when type in @unsupported do
-    IO.puts("unsupported type: #{type}")
+    IO.puts("unsupported type: #{type} for #{ctx.spec["name"]}")
     # not sure why raw_result is true here, but that's what the erlang client does...?
     eval_conditions(user, rest, rule, ctx, [%EvaluationResult{result: false, raw_result: true} | acc])
   end
@@ -298,16 +303,19 @@ defmodule Statsig.Evaluator do
     do: !compare(val, target, "any_case_sensitive")
 
   defp compare(val, target, "str_starts_with_any") do
-    Enum.any?(target, fn t -> String.starts_with?(val, t) end)
+    s_val = to_string(val) |> String.downcase()
+    Enum.any?(target, fn t -> String.starts_with?(s_val, String.downcase(to_string(t))) end)
   end
 
   defp compare(val, target, "str_ends_with_any") do
-    Enum.any?(target, fn t -> String.ends_with?(val, t) end)
+    s_val = to_string(val) |> String.downcase()
+    Enum.any?(target, fn t -> String.ends_with?(s_val, String.downcase(to_string(t))) end)
   end
 
   # should the target be a list?
   defp compare(val, target, "str_contains_any") do
-    Enum.any?(target, fn t -> String.contains?(to_string(val), t) end)
+    s_val = to_string(val) |> String.downcase()
+    Enum.any?(target, fn t -> String.contains?(s_val, String.downcase(to_string(t))) end)
   end
 
   defp compare(val, target, "str_contains_none"), do: !compare(val, target, "str_contains_any")
@@ -324,7 +332,14 @@ defmodule Statsig.Evaluator do
     end
   end
 
+  defp compare(nil, nil, "eq"), do: true
+  defp compare(nil, _target, "eq"), do: false
+  defp compare(_val, nil, "eq"), do: false
   defp compare(val, target, "eq"), do: val == target
+
+  defp compare(nil, nil, "neq"), do: false
+  defp compare(nil, _target, "neq"), do: true
+  defp compare(_val, nil, "neq"), do: true
   defp compare(val, target, "neq"), do: val != target
 
   # all below comparisons are ~numeric, and should return false if either value is nil
@@ -442,9 +457,12 @@ defmodule Statsig.Evaluator do
       "country" -> user.country
       "locale" -> user.locale
       "appversion" -> user.app_version
-      _ ->
-        # Check custom fields if not found in main user fields
+      _ -> nil
+    end |> case do
+      nil ->
+        # If not found or nil in top-level, check custom and private attributes
         try_get_with_lower(user.custom || %{}, prop) || try_get_with_lower(user.private_attributes || %{}, prop)
+      value -> value
     end
   end
 
