@@ -23,7 +23,22 @@ defmodule Statsig.DynamicConfig do
     secondary_exposures: []
   ]
 
-  def new(config_name, value \\ %{}, rule_id \\ "", group_name \\ nil, id_type \\ nil, secondary_exposures \\ []) do
+  @spec new(
+    String.t(),
+    map(),
+    String.t() | nil,
+    String.t() | nil,
+    String.t() | nil,
+    [secondary_exposure()] | nil
+  ) :: t()
+  def new(
+    config_name,
+    value,
+    rule_id,
+    group_name,
+    id_type,
+    secondary_exposures
+  ) do
     %__MODULE__{
       name: config_name || "",
       value: value || %{},
