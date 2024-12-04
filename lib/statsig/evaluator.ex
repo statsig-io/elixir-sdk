@@ -1,4 +1,7 @@
 defmodule Statsig.Evaluator do
+
+  alias Statsig.User
+
   @unsupported ["ip_based"]
 
   alias Statsig.EvaluationResult
@@ -40,7 +43,7 @@ defmodule Statsig.Evaluator do
       %{
         gate: name,
         gateValue: to_string(result.result),
-        ruleID: Map.get(result.rule, "id"),
+        ruleID: result.rule["id"],
         configVersion: to_string(Map.get(ctx.spec, "version", ""))
       }
       | Enum.reverse(result.exposures)
@@ -50,7 +53,7 @@ defmodule Statsig.Evaluator do
   end
 
   defp do_eval(_user, %Context{spec: %{"enabled" => false, "defaultValue" => default}}),
-    do: %EvaluationResult{value: default, rule: %{id: "disabled"}, reason: :disabled}
+    do: %EvaluationResult{value: default, rule: %{"id" => "disabled"}, reason: :disabled}
 
   defp do_eval(user, %Context{spec: %{"rules" => rules}} = ctx),
     do: eval_rules(user, rules, ctx, [])
@@ -58,7 +61,7 @@ defmodule Statsig.Evaluator do
   defp eval_rules(_user, [], %Context{spec: %{"defaultValue" => default}}, results) do
     Enum.reduce(
       results,
-      %EvaluationResult{result: false, value: default, rule: %{id: "default"}, reason: :no_rule_match},
+      %EvaluationResult{result: false, value: default, rule: %{"id" => "default"}, reason: :no_rule_match},
       fn r, final ->
         %EvaluationResult{final | exposures: r.exposures ++ final.exposures}
       end
@@ -422,33 +425,40 @@ defmodule Statsig.Evaluator do
     hash
   end
 
-  defp get_user_id(user, "userID"), do: try_get_with_lower(user, "userID") |> to_string()
+  defp get_user_id(%User{} = user, "userID"), do: to_string(user.user_id)
 
-  defp get_user_id(user, prop),
-    do: try_get_with_lower(Map.get(user, "customIDs", %{}), prop) |> to_string()
+  defp get_user_id(%User{} = user, prop) do
+    (user.custom_ids || %{})
+    |> Map.get(prop)
+    |> to_string()
+  end
 
-  # this is kind of messy, but it should work for now
-  defp get_user_field(user, prop) do
-    case try_get_with_lower(user, prop) do
-      nil -> try_get_with_lower(Map.get(user, "custom", %{}), prop)
-      found -> found
-    end
-    |> case do
-      nil -> try_get_with_lower(Map.get(user, "privateAttributes", %{}), prop)
-      found -> found
+  defp get_user_field(%User{} = user, prop) do
+    case String.downcase(prop) do
+      "userid" -> user.user_id
+      "email" -> user.email
+      "ip" -> user.ip
+      "useragent" -> user.user_agent
+      "country" -> user.country
+      "locale" -> user.locale
+      "appversion" -> user.app_version
+      _ ->
+        # Check custom fields if not found in main user fields
+        try_get_with_lower(user.custom || %{}, prop) || try_get_with_lower(user.private_attributes || %{}, prop)
     end
   end
 
-  defp get_env_field(%{"statsigEnvironment" => env}, field),
-    do: try_get_with_lower(env, field) |> to_string()
+  defp get_env_field(%User{statsig_environment: nil}, _field), do: nil
 
-  defp get_env_field(_, _), do: nil
+  defp get_env_field(%User{} = user, field) do
+    user.statsig_environment
+    |> Map.get(field)
+    |> to_string()
+  end
 
   defp try_get_with_lower(obj, prop) do
-    lower = String.downcase(prop)
-
     case Map.get(obj, prop) do
-      x when x == nil or x == [] or x == "" -> Map.get(obj, lower)
+      x when x == nil -> Map.get(obj, String.downcase(prop))
       x -> x
     end
   end

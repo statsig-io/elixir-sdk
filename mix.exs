@@ -16,7 +16,7 @@ defmodule Statsig.MixProject do
   def application do
     [
       mod: {Statsig.Application, []},
-      extra_applications: [:logger, :jason]
+      extra_applications: [:logger]
     ]
   end
 
@@ -28,8 +28,11 @@ defmodule Statsig.MixProject do
   defp deps do
     [
       {:req, "~> 0.5"},
-      {:jason, "~> 1.2"},
       {:ua_parser, "~> 1.8"}
     ]
+  end
+
+  defp aliases() do
+    [test: "test --no-start"]
   end
 end
