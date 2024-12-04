@@ -22,15 +22,25 @@ defmodule Statsig.User do
 
   def new(user_id_or_custom_ids, params \\ [])
 
-  def new(custom_ids = [_ | _], params) do
+  def new(custom_ids, params) when is_map(custom_ids) do
+    if map_size(custom_ids) == 0 do
+      raise "You must provide a user_id or custom_ids"
+    end
     struct(__MODULE__, Keyword.merge(params, custom_ids: custom_ids))
   end
 
   def new(user_id, params) when is_binary(user_id) do
+    if String.trim(user_id) == "" do
+      raise "You must provide a user_id or custom_ids"
+    end
     struct(__MODULE__, Keyword.merge(params, user_id: user_id))
   end
 
-  def new(_, _), do: raise("You must provide a user id or custom ids")
+  def new(user_id, params) when is_number(user_id) do
+    struct(__MODULE__, Keyword.merge(params, user_id: to_string(user_id)))
+  end
+
+  def new(nil, _), do: raise("You must provide a user_id or custom_ids")
 
   def encode_as(key) when is_atom(key) do
     case key do
@@ -48,13 +58,10 @@ defmodule Statsig.User do
       user
       |> Map.from_struct()
       |> Map.delete(:private_attributes)
-      |> Map.update!(:custom_ids, fn custom_ids ->
-        custom_ids && Map.new(custom_ids)
-      end)
       |> Enum.reject(&match?({_, nil},&1))
       |> Map.new(fn {key, value} ->
         {Statsig.User.encode_as(key), value}
-        end)
+      end)
       |> Jason.Encode.map(opts)
     end
   end

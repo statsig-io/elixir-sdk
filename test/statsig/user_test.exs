@@ -15,20 +15,28 @@ defmodule Statsig.UserTest do
       assert user.email == "test@example.com"
     end
 
-    test "accepts custom_ids list as first argument" do
-      user = User.new([employee_id: "456"])
-      assert user.custom_ids == [employee_id: "456"]
+    test "accepts custom_ids map as first argument" do
+      user = User.new(%{employee_id: "456"})
+      assert user.custom_ids == %{employee_id: "456"}
     end
 
     test "accepts custom_ids with additional params" do
-      user = User.new([employee_id: "456"], email: "test@example.com")
-      assert user.custom_ids == [employee_id: "456"]
+      user = User.new(%{employee_id: "456"}, email: "test@example.com")
+      assert user.custom_ids == %{employee_id: "456"}
       assert user.email == "test@example.com"
     end
 
     test "raises when neither user_id nor custom_ids is provided" do
-      assert_raise RuntimeError, "You must provide a user id or custom ids", fn ->
+      assert_raise RuntimeError, "You must provide a user_id or custom_ids", fn ->
+        User.new(nil)
+      end
+
+      assert_raise RuntimeError, "You must provide a user_id or custom_ids", fn ->
         User.new(%{})
+      end
+
+      assert_raise RuntimeError, "You must provide a user_id or custom_ids", fn ->
+        User.new("")
       end
     end
   end
@@ -53,7 +61,7 @@ defmodule Statsig.UserTest do
       user = User.new("123", [
         email: "test@example.com",
         custom: %{"is_employee" => true},
-        custom_ids: [employee_id: "456"],
+        custom_ids: %{employee_id: "456"},
         ip: "1.2.3.4",
         user_agent: "Mozilla",
         country: "US",

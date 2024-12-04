@@ -428,8 +428,8 @@ defmodule Statsig.Evaluator do
   defp get_user_id(%User{} = user, "userID"), do: to_string(user.user_id)
 
   defp get_user_id(%User{} = user, prop) do
-    (user.custom_ids || [])
-    |> Keyword.get(String.to_atom(prop))
+    (user.custom_ids || %{})
+    |> Map.get(prop)
     |> to_string()
   end
 
