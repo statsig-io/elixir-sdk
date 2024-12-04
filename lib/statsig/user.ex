@@ -30,9 +30,6 @@ defmodule Statsig.User do
   end
 
   def new(user_id, params) when is_binary(user_id) do
-    if String.trim(user_id) == "" do
-      raise "You must provide a user_id or custom_ids"
-    end
     struct(__MODULE__, Keyword.merge(params, user_id: user_id))
   end
 
