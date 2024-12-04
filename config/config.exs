@@ -21,4 +21,6 @@ import Config
 #     config :logger, level: :info
 #
 
-Config.import_config("#{Mix.env()}.exs")
+if File.exists?("config/#{Mix.env()}.exs") do
+  Config.import_config("#{Mix.env()}.exs")
+end
