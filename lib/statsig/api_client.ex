@@ -3,7 +3,7 @@ defmodule Statsig.APIClient do
   @default_logging_api_url "https://statsigapi.net/v1"
   @default_config_specs_api_url "https://api.statsigcdn.com/v1"
 
-  def download_config_specs(since_time \\ 0) do
+  def download_config_specs(since_time \\ 0, timeout \\ nil) do
     case api_key() do
       {:ok, key} ->
         base_url = api_url(@default_config_specs_api_url)
@@ -14,7 +14,10 @@ defmodule Statsig.APIClient do
           |> URI.append_query(URI.encode_query(sinceTime: to_string(since_time)))
           |> URI.to_string()
 
-        case Req.get(url: url, headers: headers(key)) do
+        request_opts = [url: url, headers: headers(key)]
+        request_opts = if timeout, do: Keyword.put(request_opts, :receive_timeout, timeout), else: request_opts
+
+        case Req.get(request_opts) do
           {:ok, %Req.Response{status: status, body: %{} = body}} when status in 200..299 ->
             {:ok, body}
 
